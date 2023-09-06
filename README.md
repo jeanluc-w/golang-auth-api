@@ -2,4 +2,4 @@
 
 ## Technology used:
 - [Go](https://go.dev/learn/)
-- [Postgres](https://www.postgresql.org/docs/current/index.html)
+- [PostgreSQL](https://www.postgresql.org/docs/current/index.html)
