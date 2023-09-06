@@ -3,3 +3,4 @@
 ## Technology used:
 - **Go**: Language for the APIs.
 - **PostgreSQL**: Core database.
+- **Render**: Cloud host for database.
