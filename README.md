@@ -1,6 +1,6 @@
 # REST APIs for Edibubble
 
 ## Technology used:
-- **Go**: Language for the APIs.
+- **GoLang**: Language for the APIs.
 - **PostgreSQL**: Core database.
 - **Render**: Cloud host for database.
