@@ -9,9 +9,11 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-// Function to easily create our JSON responses. Parameters are
-// the destination http.ResponseWriter, the HTTP status code to send, the data to 
-// encode in JSON, and a header map containing additional HTTP headers
+// Function to easily create our JSON responses. Parameters are:
+// - The destination http.ResponseWriter
+// - The HTTP status code to send
+// - The data to encode in JSON
+// - A header map containing additional HTTP headers
 func (app *application) writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
 	json, err := json.Marshal(data)
 	if err != nil {
