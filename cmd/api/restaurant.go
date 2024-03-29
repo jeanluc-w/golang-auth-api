@@ -17,7 +17,7 @@ func (app *application) getRestaurantHandler(w http.ResponseWriter, r *http.Requ
 	params := httprouter.ParamsFromContext(r.Context())
 	// If the ByName() parameter couldn't be converted from a string to an int, 
 	// or is less than 1, we know the ID is invalid so return a 404 Not Found response.
-	id, err := app.readIdParam(r)
+	id, err := app.readIDParam(r)
 	if err != nil {
 		http.NotFound(w, r)
 		return
