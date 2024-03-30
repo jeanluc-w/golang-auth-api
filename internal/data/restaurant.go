@@ -6,12 +6,12 @@ import (
 
 type Restaurant struct {
 	ID						int64				// Unique integer ID for restaurant
-	CreatedAt			time.Time		// Timestamp for when the restaurant was added to the database
+	UpdatedAt			time.Time		// Timestamp for when the restaurant was last updated (help keep people informed)
 	Name					string			// Name of the restaurant
 	Website				string			// The restaurant's website (if available)
 	PhoneNumber 	string			// Number to call the restaurant (if available)
 	Tags					[]int				// The ID of tags of type of food/cuisine
-	DeliveryApps	[]string		// List of the delivery app links this is available on
+	DeliveryApps	[]string		// List of the restaurant's delivery app urls it's available on
 	Pricing				int8				// Simple 1-4 for how expensive it is
 	Longitude			float32			// Convert to PostGIS Point geometry in sql DB
 	Latitude			float32
