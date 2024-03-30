@@ -10,10 +10,15 @@ type Restaurant struct {
 	Name					string			// Name of the restaurant
 	Website				string			// The restaurant's website (if available)
 	PhoneNumber 	string			// Number to call the restaurant (if available)
-	Tags					[]string		// Tags of type of food/cuisine
-	DeliveryApps	[]string		// List of the delivery apps this is available on
+	Tags					[]int				// The ID of tags of type of food/cuisine
+	DeliveryApps	[]string		// List of the delivery app links this is available on
 	Pricing				int8				// Simple 1-4 for how expensive it is
-	Longitude			int32				// Make sure long and lat are multipled before storing
-	Latitude			int32				// Convert to PostGIS Point geometry in sql DB
+	Longitude			float32			// Convert to PostGIS Point geometry in sql DB
+	Latitude			float32
 	// Need to include address info
+}
+
+type Tags struct {
+	ID		int64		// Unique interger ID for a food/cuisine tag
+	Name	string	// The tag (e.g. Spicy, Korean, Vegetarian, etc.)
 }
