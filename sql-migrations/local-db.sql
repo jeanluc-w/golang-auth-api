@@ -1,2 +1,2 @@
-CREATE ROLE edibubble_admin LOGIN PASSWORD 'set_custom_password_here';
-CREATE DATABASE edibubble WITH OWNER = myuser;
+CREATE ROLE edibubble_admin LOGIN PASSWORD 'set_this_yourself';
+CREATE DATABASE edibubble WITH OWNER = edibubble_admin;
