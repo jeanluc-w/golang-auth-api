@@ -37,8 +37,11 @@ Basic Guide: [https://lets-go-further.alexedwards.net](https://lets-go-further.a
 - **Golang**: Language for the APIs.
 - **PostgreSQL**: Core database.
 
-## Starting DB locally (linux psql)
-Login command (after completing setup): `psql -h localhost -d edibubble -U edibubble_admin -p <port>`
+## Starting Golang (command prompt)
+Simply run `go run ./cmd/api`
+
+## Starting DB locally (linux)
+Login command (after completing setup): `psql -h localhost -d edibubble -U edibubble_admin -p 5432`
 
 Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf`
 
