@@ -45,7 +45,7 @@ Login command (after completing setup): `psql -h localhost -d edibubble -U edibu
 
 Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf`
 
-1. Run `sudo -u postgres psql postgres` to log in
-2. Copy the code from `api/sql-migrations/initial.sql` and set the password
-3. Update the `.env.local` with the password
-4. Exit psql
+1. Run `sudo -u postgres psql postgres` to log in.
+2. Copy the code from `api/sql-migrations/initial.sql` and set the password.
+3. Update the `.env.local` in Web with the password.
+4. (OPTIONAL) Log in as the user you just made while working on the DB directly.
