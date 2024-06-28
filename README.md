@@ -20,7 +20,7 @@ Eventually want:
 |--------|----------------------------------|---------------------------------|------------------------------------------------------------------|
 | GET    | /v1/healthcheck                  | healthcheckHandler              | Check that the service is up and running.                        |
 | POST   | /v1/set-username                 | setUsernameHandler              | Set a user's username.                                           |
-| POST   | /v1/signup                       | signupHandler                   | Set user's username on their first sign-up.                      |
+| GET    | /v1/user/:id                     | getUserHandler                  | Get a user's profile information                                 |
 | POST   | /v1/restaurant                   | createRestaurantHandler         | Create a new restaurant.                                         |
 | GET    | /v1/restaurant/:id               | getRestaurantHandler            | Get the information of a restaurant.                             |
 | PUT    | /v1/restaurant/:id               | editRestaurantHandler           | Edit the information of a restaurant.                            |
