@@ -1,11 +1,11 @@
 package data
 
-// The user's account
+// Getting a user's account
 type User struct {
 	ID            int64  `json:"id"`
 	Username      string `json:"username"`
 	Name          string `json:"name"`
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
+	Email         string `json:"-"`
+	EmailVerified bool   `json:"-"`
 	Image         string `json:"profile_picture"`
 }
