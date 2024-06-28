@@ -2,10 +2,10 @@ package data
 
 // The user's account
 type User struct {
-	ID            int64  // Unique ID of user.
-	Username      string // User's username.
-	Name          string // The user's name.
-	Email         string // The user's email.
-	EmailVerified bool   // Boolean if the user is verified or not.
-	Image         string // URL string of the user's profile picture.
+	ID            int64  `json:"id"`
+	Username      string `json:"username"`
+	Name          string `json:"name"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	Image         string `json:"profile_picture"`
 }
