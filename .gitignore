@@ -1,3 +1,4 @@
 # Development variables
 .env.local
 sql-migrations/local-db.sql
+api.exe

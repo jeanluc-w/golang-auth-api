@@ -38,7 +38,8 @@ Basic Guide: [https://lets-go-further.alexedwards.net](https://lets-go-further.a
 - **PostgreSQL**: Core database.
 
 ## Starting Golang (command prompt)
-Simply run `go run ./cmd/api`
+Simply run `go run ./cmd/api` to start up the server.
+If tired of running into the Windows security popup, simply run `go build ./cmd/api && api.exe` so it will always run in the same folder, preventing the popup from repeated uses of running the server.
 
 ## Starting DB locally (linux)
 Login command (after completing setup): `psql -h localhost -d edibubble -U edibubble_admin -p 5432`

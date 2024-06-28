@@ -9,17 +9,16 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-// Function to easily create our JSON responses. Parameters are:
-// - The destination http.ResponseWriter
-// - The HTTP status code to send
-// - The data to encode in JSON
-// - A header map containing additional HTTP headers
+// Function to easily create our JSON responses. This takes the destination
+// http.ResponseWriter, the HTTP status code to send, the data to encode to JSON, and a
+// header map containing any additional HTTP headers we want to include in the response
 func (app *application) writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
+	// Convert the data to JSON
 	json, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
-	// Add a newline so it looks clean if we're testing the endpoint in a terminal
+	// Add a newline so it looks clean if we're pulling the endpoint in a terminal
 	json = append(json, '\n')
 	// Loop through and add the custom headers to the response object
 	for key, value := range headers {
@@ -34,7 +33,7 @@ func (app *application) writeJSON(w http.ResponseWriter, status int, data any, h
 }
 
 // Retrieve the "id" URL parameter from the current request context, then convert it to
-// an integer and return it. If the operation isn't successful, return 0 and an error. 
+// an integer and return it. If the operation isn't successful, return 0 and an error.
 func (app *application) readIDParam(r *http.Request) (int64, error) {
 	params := httprouter.ParamsFromContext(r.Context())
 
