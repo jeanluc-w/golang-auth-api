@@ -9,12 +9,14 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+type envelope map[string]any
+
 // Function to easily create our JSON responses. This takes the destination
 // http.ResponseWriter, the HTTP status code to send, the data to encode to JSON, and a
 // header map containing any additional HTTP headers we want to include in the response
-func (app *application) writeJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
+func (app *application) writeJSON(w http.ResponseWriter, status int, data envelope, headers http.Header) error {
 	// Convert the data to JSON
-	json, err := json.Marshal(data)
+	json, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return err
 	}
