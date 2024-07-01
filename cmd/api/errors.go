@@ -40,12 +40,12 @@ func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Reque
 
 // Handler for 404 error responses
 func (app *application) notFoundResponse(w http.ResponseWriter, r *http.Request) {
-	message := "The requested resource could not be found"
+	message := "the requested resource could not be found"
 	app.errorResponse(w, r, http.StatusNotFound, message)
 }
 
 // Handler for 405 error responses
 func (app *application) methodNotAllowedResponse(w http.ResponseWriter, r *http.Request) {
-	message := fmt.Sprintf("The %s method is not supported for this resource", r.Method)
+	message := fmt.Sprintf("the %s method is not supported for this resource", r.Method)
 	app.errorResponse(w, r, http.StatusNotFound, message)
 }

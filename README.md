@@ -50,3 +50,6 @@ Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf`
 2. Copy the code from `api/sql-migrations/initial.sql` and set the password.
 3. Update the `.env.local` in Web with the password.
 4. (OPTIONAL) Log in as the user you just made while working on the DB directly.
+
+### Where to continue in the book:
+Making a bad request helper
