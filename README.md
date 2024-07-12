@@ -52,4 +52,4 @@ Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf`
 4. (OPTIONAL) Log in as the user you just made while working on the DB directly.
 
 ### Where to continue in the book:
-Making a bad request helper
+Custom JSON Decoding
