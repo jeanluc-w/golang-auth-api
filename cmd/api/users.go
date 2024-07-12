@@ -2,6 +2,7 @@ package main
 
 import (
 	"edibubble/internal/data"
+	"edibubble/internal/validator"
 	"fmt"
 	"net/http"
 )
@@ -11,9 +12,20 @@ func (app *application) setUsernameHandler(w http.ResponseWriter, r *http.Reques
 	var input struct {
 		Username string `json:"username"`
 	}
+	// Parse the request body
 	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.badRequestResponse(w, r, err)
+		return
+	}
+	// Validate the username from the request body
+	v := validator.New()
+	// Although the Regex will cover all of the checks, we want separate checks to return descriptive errors
+	v.Check(len(input.Username) < 2, "too_short", "must be at least 2 characters long")
+	v.Check(len(input.Username) > 30, "too_long", "must be less than 30 characters long")
+	v.Check(validator.Matches(input.Username, validator.UsernameRX), "illegal_characters", "must only contain letters, numbers, periods or underscores")
+	if !v.Valid() {
+		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
 	// Dump back the contents from the input struct in a HTTP response.
