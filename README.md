@@ -52,4 +52,6 @@ Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf`
 4. (OPTIONAL) Log in as the user you just made while working on the DB directly.
 
 ### Where to continue in the book:
-Validating JSON input
+Database Setup and Configuration
+
+*go back to `Validating JSON Input` > `Making validation rules reusable` for later validations*
