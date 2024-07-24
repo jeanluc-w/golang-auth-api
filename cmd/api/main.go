@@ -1,48 +1,72 @@
 package main
+
 import (
-	"flag"
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 )
+
 const version = "1.0.0"
 
 // A config struct to hold all the configuration settings for our application.
 // Configuration settings are the network port that we want the server
-// to listen on and the name of the current operating environment for the
-// application (dev or prod). We will read in these configuration settings 
-// from command-line flags when the application starts.
+// to listen on, the name of the current environment for the
+// application (dev or prod), and the database connection.
+// The values are read in from the command line.
 type config struct {
 	port int
 	env  string
+	db   struct {
+		dsn string
+	}
 }
 
-// Define an application struct to hold the dependencies for our HTTP handlers, helpers,
-// and middleware. At the moment this only contains a copy of the config struct and a 
-// logger, but it will grow to include a lot more as our build progresses.
+// An application struct to hold the dependencies for our HTTP handlers, helpers,
+// and middleware.
 type application struct {
 	config config
 	logger *slog.Logger
 }
 
 func main() {
-	// Declare an instance of the config struct.
+	// Declare an instance of the config struct and single error object.
 	var cfg config
-
-	// Read the value of the port and env command-line flags into the config struct. We
-	// default to using the port number 4000 and the environment "development" if no
-	// corresponding flags are provided.
-	flag.IntVar(&cfg.port, "port", 4000, "API server port")
-	flag.StringVar(&cfg.env, "env", "dev", "Environment (dev|stage|prod)")
-	flag.Parse()
-
-	// Initialize a new structured logger which writes log entries to the standard out 
-	// stream.
+	var err error
+	// Initialize the logger.
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	// Declare an instance of the application struct, containing the config struct and 
+	// Read the value of the port and env command-line flags into the config struct. We
+	// default to using the port number 4000, the environment "development", and
+	// the development DSN if no corresponding flags are provided.
+	err = godotenv.Load()
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+	cfg.port, err = strconv.Atoi(os.Getenv("SERVER_PORT"))
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+	cfg.env = os.Getenv("ENVIRONMENT")
+	cfg.db.dsn = os.Getenv("POSTGRES_CONNECTION_STRING")
+
+	// Initialize the DB connection pool and defer its closing to just before main() exits
+	dbpool, err := openDB(cfg)
+	if err != nil {
+		logger.Error(err.Error())
+		os.Exit(1)
+	}
+	defer dbpool.Close()
+
+	// Initialize the application struct, containing the config struct and
 	// the logger.
 	app := &application{
 		config: cfg,
@@ -51,17 +75,27 @@ func main() {
 
 	// Declare the HTTP server
 	srv := &http.Server{
-			Addr:         fmt.Sprintf(":%d", cfg.port),
-			Handler:      app.routes(),
-			IdleTimeout:  time.Minute,
-			ReadTimeout:  5 * time.Second,
-			WriteTimeout: 10 * time.Second,
-			ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
+		Addr:         fmt.Sprintf(":%d", cfg.port),
+		Handler:      app.routes(),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
 	// Start the HTTP server.
 	logger.Info("starting server", "addr", srv.Addr, "env", cfg.env)
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	logger.Error(err.Error())
 	os.Exit(1)
+}
+
+func openDB(config config) (*pgxpool.Pool, error) {
+	// Create the connection pool
+	pool, err := pgxpool.New(context.Background(), config.db.dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	return pool, nil
 }
