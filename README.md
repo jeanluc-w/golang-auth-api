@@ -1,6 +1,10 @@
 # REST APIs for Edibubble
 
-Functionality:
+## Technologies To Use/Learn:
+- **[Golang](https://go.dev/doc/)**: Language for the APIs.
+- **[PostgreSQL](https://www.postgresql.org/docs/)**: Core database.
+
+### Functionality:
 - Ability to create, update, view, and delete lists
   - restaurants only initially
   - Able to create personal or shared with others
@@ -31,11 +35,6 @@ Eventually want:
 | DELETE | /v1/list/restaurants/:id         | deleteListHandler               | Delete a user's restaurant list.                                 |
 | GET    | /v1/list/restaurants/:id/history | getRestaurantListHistoryHandler | Get the list's revision history so you know who made what edits. |
 
-Basic Guide: [https://lets-go-further.alexedwards.net](https://lets-go-further.alexedwards.net)
-
-## Technology used:
-- **Golang**: Language for the APIs.
-- **PostgreSQL**: Core database.
 
 ## Starting Golang (command prompt)
 Simply run `go run ./cmd/api` to start up the server.
