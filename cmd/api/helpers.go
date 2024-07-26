@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -13,6 +14,15 @@ import (
 )
 
 type envelope map[string]any
+
+// Returns either the environment variable value or an empty string
+func getEnv(key string, fallback string) string {
+	response := os.Getenv(key)
+	if len(key) == 0 {
+		return fallback
+	}
+	return response
+}
 
 // Function to easily create our JSON responses. This takes the destination
 // http.ResponseWriter, the HTTP status code to send, the data to encode to JSON, and a
