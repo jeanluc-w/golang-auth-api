@@ -1,4 +1,4 @@
-CREATE TABLE users
+CREATE TABLE IF NOT EXISTS users
 (
   id SERIAL,
   username VARCHAR(30),
@@ -10,7 +10,7 @@ CREATE TABLE users
   PRIMARY KEY (id)
 );
 
-CREATE TABLE accounts
+CREATE TABLE IF NOT EXISTS accounts
 (
   id SERIAL,
   "userId" INTEGER NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE accounts
   PRIMARY KEY (id)
 );
 
-CREATE TABLE verification_token
+CREATE TABLE IF NOT EXISTS verification_token
 (
   identifier TEXT NOT NULL,
   expires TIMESTAMPTZ NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE verification_token
   PRIMARY KEY (identifier, token)
 );
 
-CREATE TABLE sessions
+CREATE TABLE IF NOT EXISTS sessions
 (
   id SERIAL,
   "userId" INTEGER NOT NULL,

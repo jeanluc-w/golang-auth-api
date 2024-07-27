@@ -3,6 +3,7 @@
 ## Technologies To Use/Learn:
 - **[Golang](https://go.dev/doc/)**: Language for the APIs.
 - **[PostgreSQL](https://www.postgresql.org/docs/)**: Core database.
+- **[golang-migrate](https://github.com/golang-migrate/migrate)**: Used to setup SQL migrations.
 
 ### Functionality:
 - Ability to create, update, view, and delete lists
