@@ -41,15 +41,31 @@ Eventually want:
 Simply run `go run ./cmd/api` to start up the server.
 If tired of running into the Windows security popup, simply run `go build ./cmd/api && api.exe` so it will always run in the same folder, preventing the popup from repeated uses of running the server.
 
-## Starting DB locally (linux)
+
+## Starting DB locally (WSL/linux)
 Login command (after completing setup): `psql -h localhost -d edibubble -U edibubble_admin -p 5432`
 
-Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf`
+Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf` if you use a different one from the default.
 
 1. Run `sudo -u postgres psql postgres` to log in.
-2. Copy the code from `api/sql-migrations/initial.sql` and set the password.
-3. Update the `.env.local` in Web with the password.
+2. Copy the code from below and set the password.
+3. Update the `.env.local` in Web with the password so authjs can connect.
 4. (OPTIONAL) Log in as the user you just made while working on the DB directly.
+  - If using cmd prompt to manage the repos, you'll need WSL/linux up so the db is actually running/avaialble
+
+### SQL to run on your machine when setting up a test DB
+```
+CREATE ROLE edibubble_admin LOGIN PASSWORD '*set_local_password_string_here*';
+CREATE DATABASE edibubble WITH OWNER = edibubble_admin;
+```
+
+After the database is set up, run the following while in the repo's root directory to create the tables:
+
+`migrate -path=./sql-migrations -database {database_connection_string_here} up`
+
+Swap `up` to `down` if you want to remove it. Add a number after those verbs if you want a specific version.
+
+
 
 ### Where to continue in the book:
 SQL Migrations
