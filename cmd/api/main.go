@@ -24,7 +24,9 @@ type config struct {
 	port int
 	env  string
 	db   struct {
-		dsn string
+		dsn         string        // connection string
+		maxConns    string        // pool_max_conns
+		maxIdleTime time.Duration // pool_max_conn_idle_time
 	}
 }
 
@@ -90,9 +92,16 @@ func main() {
 }
 
 // Open the DB connection pool
-func openDB(config config) (*pgxpool.Pool, error) {
+func openDB(cfg config) (*pgxpool.Pool, error) {
+	var err error
+	cfg.db.maxConns = getEnv("MAX_CONNS", "25")
+	cfg.db.maxIdleTime, err = time.ParseDuration(getEnv("MAX_IDLE_TIME", "10m"))
+	if err != nil {
+		return nil, err
+	}
+	configuredDsn := fmt.Sprintf("%s?pool_max_conns=%s&pool_max_conn_idle_time=%s", cfg.db.dsn, cfg.db.maxConns, cfg.db.maxIdleTime)
 	// Create the connection pool
-	pool, err := pgxpool.New(context.Background(), config.db.dsn)
+	pool, err := pgxpool.New(context.Background(), configuredDsn)
 	if err != nil {
 		return nil, err
 	}

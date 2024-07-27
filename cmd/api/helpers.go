@@ -15,7 +15,7 @@ import (
 
 type envelope map[string]any
 
-// Returns either the environment variable value or an empty string
+// Returns either the environment variable value or the fallback string
 func getEnv(key string, fallback string) string {
 	response := os.Getenv(key)
 	if len(key) == 0 {
