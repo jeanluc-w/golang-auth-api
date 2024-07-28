@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"edibubble/internal/data"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -35,6 +36,7 @@ type config struct {
 type application struct {
 	config config
 	logger *slog.Logger
+	models data.Models
 }
 
 func main() {
@@ -74,6 +76,7 @@ func main() {
 	app := &application{
 		config: cfg,
 		logger: logger,
+		models: data.NewModels(dbpool),
 	}
 	// Declare the HTTP server
 	srv := &http.Server{

@@ -1,9 +1,9 @@
 CREATE TABLE IF NOT EXISTS users
 (
   id SERIAL,
-  username VARCHAR(30),
-  name VARCHAR(255),
-  email VARCHAR(255),
+  username TEXT,
+  name TEXT,
+  email TEXT,
   "emailVerified" TIMESTAMPTZ,
   image TEXT,
 
@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS accounts
 (
   id SERIAL,
   "userId" INTEGER NOT NULL,
-  type VARCHAR(255) NOT NULL,
-  provider VARCHAR(255) NOT NULL,
-  "providerAccountId" VARCHAR(255) NOT NULL,
+  type TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  "providerAccountId" TEXT NOT NULL,
   refresh_token TEXT,
   access_token TEXT,
   expires_at BIGINT,
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS sessions
   id SERIAL,
   "userId" INTEGER NOT NULL,
   expires TIMESTAMPTZ NOT NULL,
-  "sessionToken" VARCHAR(255) NOT NULL,
+  "sessionToken" TEXT NOT NULL,
 
   PRIMARY KEY (id)
 );

@@ -2,6 +2,8 @@ package data
 
 import (
 	"edibubble/internal/validator"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Getting a user's account
@@ -14,7 +16,9 @@ type User struct {
 	Image         string `json:"profile_picture"`
 }
 
-// TODO: Validate auth token.
+type UserModel struct {
+	DB *pgxpool.Pool
+}
 
 // Validate a username is proper length and has valid characters.
 func ValidateUsername(v *validator.Validator, username string) {
@@ -31,4 +35,8 @@ func ValidateUser(v *validator.Validator, user *User) {
 	ValidateUsername(v, user.Username)
 	v.Check(len(user.Name) <= 70, "name-too_long", "must be less than or equal to 70 characters long")
 	v.Check(validator.Matches(user.Email, validator.EmailRX), "email-illegal_characters", "must be a valid email address")
+}
+
+func (u UserModel) SearchUsername(username string) error {
+	return nil
 }

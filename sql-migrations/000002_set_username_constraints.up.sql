@@ -1,0 +1,1 @@
+ALTER TABLE users ADD CONSTRAINT username_check CHECK (LENGTH(username) BETWEEN 2 AND 30)

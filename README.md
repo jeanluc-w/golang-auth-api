@@ -58,16 +58,19 @@ Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf` if you 
 CREATE ROLE edibubble_admin LOGIN PASSWORD '*set_local_password_string_here*';
 CREATE DATABASE edibubble WITH OWNER = edibubble_admin;
 ```
-
+## golang-migrate 
 After the database is set up, run the following while in the repo's root directory to create the tables:
 
 `migrate -path=./sql-migrations -database {database_connection_string_here} up`
 
-Swap `up` to `down` if you want to remove it. Add a number after those verbs if you want a specific version.
+Swap `up` to `down` if you want to remove it. If you want a specific version, use `goto {version number}`.  If you encounter an error and the database becomes marked as "dirty", fix the sql error and use `force {version number}` to have it be marked clean again. 
 
+To create more migration files, simply run this with new file names:
+
+`migrate create -seq -ext=.sql -dir=./sql-migrations {file_name}`
 
 
 ### Where to continue in the book:
-SQL Migrations
+CRUD Operations
 
 *go back to `Validating JSON Input` > `Making validation rules reusable` for later validations*
