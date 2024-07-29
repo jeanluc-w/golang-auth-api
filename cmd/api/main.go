@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,6 +30,9 @@ type config struct {
 		maxConns    string        // pool_max_conns
 		maxIdleTime time.Duration // pool_max_conn_idle_time
 	}
+	cors struct {
+		trustedOrigins []string
+	}
 }
 
 // An application struct to hold the dependencies for our HTTP handlers, helpers,
@@ -43,27 +47,37 @@ func main() {
 	// Declare an instance of the config struct and single error object.
 	var cfg config
 	var err error
+
 	// Initialize the logger.
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	// Read the value of the port and env command-line flags into the config struct. We
-	// default to using the port number 4000, the environment "development", and
-	// the development DSN if no corresponding flags are provided.
+
+	// Read the environment variables into the config.
+	// Shut it down if it isn't properly set up in certain aspects.
 	err = godotenv.Load()
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
+
+	// Set basic server information (Port and environment)
 	cfg.port, err = strconv.Atoi(getEnv("SERVER_PORT", "4000"))
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
 	cfg.env = getEnv("ENVIRONMENT", "dev")
+
+	// Set the Postgres connection string
 	cfg.db.dsn = os.Getenv("POSTGRES_CONNECTION_STRING")
 	if len(cfg.db.dsn) == 0 {
 		logger.Error("missing database connection string")
 		os.Exit(1)
 	}
+
+	// Get the list of allowed origins
+	cfg.cors.trustedOrigins = strings.Fields(getEnv("TRUSTED_CORS_ORIGINS", ""))
+	logger.Info(fmt.Sprintf("Allowing cross-origins: %s", cfg.cors))
+
 	// Initialize the DB connection pool and defer its closing to just before main() exits
 	dbpool, err := openDB(cfg)
 	if err != nil {
@@ -71,6 +85,9 @@ func main() {
 		os.Exit(1)
 	}
 	defer dbpool.Close()
+
+	logger.Info("database connection pool established")
+
 	// Initialize the application struct, containing the config struct and
 	// the logger.
 	app := &application{
@@ -78,6 +95,7 @@ func main() {
 		logger: logger,
 		models: data.NewModels(dbpool),
 	}
+
 	// Declare the HTTP server
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.port),
@@ -87,6 +105,7 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
+
 	// Start the HTTP server.
 	logger.Info("starting server", "addr", srv.Addr, "env", cfg.env)
 	err = srv.ListenAndServe()

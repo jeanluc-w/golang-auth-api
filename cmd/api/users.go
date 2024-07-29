@@ -3,32 +3,58 @@ package main
 import (
 	"edibubble/internal/data"
 	"edibubble/internal/validator"
+	"errors"
 	"net/http"
 )
 
 func (app *application) setUsernameHandler(w http.ResponseWriter, r *http.Request) {
 	// Set anonymous struct for the request
 	var input struct {
-		Username string `json:"username"`
+		Username *string `json:"username"`
 	}
+
 	// Parse the request body
 	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.badRequestResponse(w, r, err)
 		return
 	}
-	username := input.Username
+
 	// Validate the username from the request body
+	if input.Username == nil {
+		app.badRequestResponse(w, r, errors.New("missing username field"))
+		return
+	}
 	v := validator.New()
-	if data.ValidateUsername(v, username); !v.Valid() {
+	if data.ValidateUsername(v, *input.Username); !v.Valid() {
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}
+
+	user := app.contextGetUser(r)
+	user.Username = *input.Username
+
+	// Attmept to set the username to the account.
+	err = app.models.User.SetUsername(user, app.logger)
+	if err != nil {
+		switch {
+		case err == data.ErrUsernameTaken:
+			app.logError(r, err)
+			app.requestDeniedByServerResponse(w, r, err)
+			return
+		default:
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+	}
+
 	// Return username
-	err = app.writeJSON(w, http.StatusOK, envelope{"username": username}, nil)
+	err = app.writeJSON(w, http.StatusOK, envelope{"username": input.Username}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
+		return
 	}
+	app.logger.Info("setUsernameHandler successfully completed")
 }
 
 func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {

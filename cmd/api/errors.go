@@ -30,32 +30,57 @@ func (app *application) errorResponse(w http.ResponseWriter, r *http.Request, st
 	}
 }
 
-// Handler for logging the server error and sending a 500 response with a message
+// 500 response with a message
 func (app *application) serverErrorResponse(w http.ResponseWriter, r *http.Request, err error) {
 	app.logError(r, err)
 
-	message := "The server encountered a problem and could not process your request"
+	message := "the server encountered a problem and could not process your request"
 	app.errorResponse(w, r, http.StatusInternalServerError, message)
 }
 
-// Handler for 404 error responses
+// 404 error response
 func (app *application) notFoundResponse(w http.ResponseWriter, r *http.Request) {
 	message := "the requested resource could not be found"
 	app.errorResponse(w, r, http.StatusNotFound, message)
 }
 
-// Handler for 405 error responses
+// 405 error responses
 func (app *application) methodNotAllowedResponse(w http.ResponseWriter, r *http.Request) {
 	message := fmt.Sprintf("the %s method is not supported for this resource", r.Method)
 	app.errorResponse(w, r, http.StatusNotFound, message)
 }
 
-// Handler for 400 error responses
+// 400 error responses
 func (app *application) badRequestResponse(w http.ResponseWriter, r *http.Request, err error) {
 	app.errorResponse(w, r, http.StatusBadRequest, err.Error())
 }
 
-// Handler for 422 error responses
+// 422 error responses
 func (app *application) failedValidationResponse(w http.ResponseWriter, r *http.Request, errors map[string]string) {
 	app.errorResponse(w, r, http.StatusUnprocessableEntity, errors)
+}
+
+// 401 error responses when the authentication is missing
+func (app *application) missingAuthenticationResponse(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("WWW-Authenticate", "Bearer")
+
+	message := "missing or invalid authorization token"
+	app.errorResponse(w, r, http.StatusUnauthorized, message)
+}
+
+// 401 error response to let them a user they need to be authenticated
+func (app *application) authenticationRequiredResponse(w http.ResponseWriter, r *http.Request) {
+	message := "you must be authenticated to access this resource"
+	app.errorResponse(w, r, http.StatusUnauthorized, message)
+}
+
+// 403 error response when the request was properly formatted, but server wouldn't complete (i.e. duplicate records)
+func (app *application) requestDeniedByServerResponse(w http.ResponseWriter, r *http.Request, err error) {
+	app.errorResponse(w, r, http.StatusBadRequest, err.Error())
+}
+
+// 403 error responses when session authorization failed
+func (app *application) sessionFailedAuthorizationResponse(w http.ResponseWriter, r *http.Request) {
+	message := "session is invalid or expired"
+	app.errorResponse(w, r, http.StatusForbidden, message)
 }
