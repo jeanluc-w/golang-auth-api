@@ -16,17 +16,20 @@ func (app *application) setUsernameHandler(w http.ResponseWriter, r *http.Reques
 	// Parse the request body
 	err := app.readJSON(w, r, &input)
 	if err != nil {
+		app.logger.Error("setUsernameHandler - could not parse request body", "Err", err)
 		app.badRequestResponse(w, r, err)
 		return
 	}
 
 	// Validate the username from the request body
 	if input.Username == nil {
+		app.logger.Error("setUsernameHandler - username missing from request")
 		app.badRequestResponse(w, r, errors.New("missing username field"))
 		return
 	}
 	v := validator.New()
 	if data.ValidateUsername(v, *input.Username); !v.Valid() {
+		app.logger.Error("setUsernameHandler - username failed validation")
 		app.failedValidationResponse(w, r, v.Errors)
 		return
 	}

@@ -43,6 +43,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 		// Strip the session id from the Authorization Header.
 		headerParts := strings.Split(authHeader, " ")
 		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
+			app.logger.Error("authenticate - could not parse session id")
 			app.missingAuthenticationResponse(w, r)
 			return
 		}
@@ -51,6 +52,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 		// Validate the sessionToken is a valid GUID
 		v := validator.New()
 		if data.ValidateSessionToken(v, sessionToken); !v.Valid() {
+			app.logger.Error("authenticate - invalid session GUID")
 			app.missingAuthenticationResponse(w, r)
 			return
 		}
@@ -59,13 +61,15 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 		if err != nil {
 			switch {
 			case errors.Is(err, data.ErrNoRows):
+				app.logger.Error("authenticate - session is not valid")
 				app.sessionFailedAuthorizationResponse(w, r)
 			default:
+				app.logger.Error("authenticate - server error", "Err", err)
 				app.serverErrorResponse(w, r, err)
 			}
 			return
 		}
-
+		app.logger.Info("authenticate - authenticated user", "userId", user.ID)
 		r = app.contextSetUser(r, user)
 		next.ServeHTTP(w, r)
 	})
@@ -77,6 +81,7 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 		user := app.contextGetUser(r)
 
 		if user.IsAnonymous() {
+			app.logger.Error("requireAuthenticatedUser - user is not authenticated")
 			app.authenticationRequiredResponse(w, r)
 			return
 		}

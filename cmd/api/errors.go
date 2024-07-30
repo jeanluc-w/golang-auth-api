@@ -19,11 +19,9 @@ func (app *application) logError(r *http.Request, err error) {
 // Handler for formatting all error responses into JSON and defualting to a
 // simple 500 if that fails
 func (app *application) errorResponse(w http.ResponseWriter, r *http.Request, status int, message any) {
-	errorRsp := envelope{"error": message}
-
 	// Write the error response with the helper and default to a 500 Internal Server Error
 	// if that fails
-	err := app.writeJSON(w, status, errorRsp, nil)
+	err := app.writeJSON(w, status, envelope{"error": message}, nil)
 	if err != nil {
 		app.logError(r, err)
 		w.WriteHeader(500)

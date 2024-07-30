@@ -46,7 +46,7 @@ func ValidateUser(v *validator.Validator, user *User) {
 	v.Check(validator.Matches(user.Email, validator.EmailRX), "email-illegal_characters", "must be a valid email address")
 }
 
-func (u UserModel) SetUsername(user *User, log *slog.Logger) error {
+func (u UserModel) SetUsername(user *User, logger *slog.Logger) error {
 	// Build the query to check if the username exists
 	query := `
 		SELECT id 
@@ -57,15 +57,14 @@ func (u UserModel) SetUsername(user *User, log *slog.Logger) error {
 	args := []any{
 		user.Username,
 	}
-	log.Info("SetUsername - Search Arguments", "Args", args)
-
+	logger.Info("SetUsername - Search Arguments", "Args", args)
 	// Search if we have a record of the username
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
 	var id int
 	err := u.DB.QueryRow(ctx, query, args...).Scan(&id)
-	log.Info("SetUsername - Search Results", "User ID", id, "Error", err)
+	logger.Info("SetUsername - Search Results", "userId", id, "Err", err)
 
 	if err != nil {
 		switch {
@@ -81,8 +80,7 @@ func (u UserModel) SetUsername(user *User, log *slog.Logger) error {
 				user.Username,
 				user.ID,
 			}
-			log.Info("SetUsername - Update Arguments", "Args", args)
-
+			logger.Info("SetUsername - Update Arguments", "Args", args)
 			ctx, cancel = context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 
@@ -98,7 +96,7 @@ func (u UserModel) SetUsername(user *User, log *slog.Logger) error {
 // Searches for the user ID by the sessionToken. Used to authenticate a user exists in the DB.
 // We don't care to pull all the user information at this stage as it could be used a lot for linking
 // to other records (e.g. lists or following link tables)
-func (u UserModel) GetUserID(sessionToken string, log *slog.Logger) (*User, error) {
+func (u UserModel) GetUserID(sessionToken string, logger *slog.Logger) (*User, error) {
 	query := `
 		SELECT "userId"
 		FROM sessions
@@ -116,7 +114,7 @@ func (u UserModel) GetUserID(sessionToken string, log *slog.Logger) (*User, erro
 	defer cancel()
 
 	err := u.DB.QueryRow(ctx, query, args...).Scan(&user.ID)
-	log.Info("Completed userId lookup", "err", err)
+	logger.Info("GetUserID - userId lookup", "Err", err)
 	if err != nil {
 		switch {
 		case errors.Is(err, ErrNoRows):
