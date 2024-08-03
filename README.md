@@ -85,10 +85,10 @@ CRUD Operations
 Do `git config --list --show-origin` to see where your global git config is located. Once found, add these lines to the bottom and replace the values for `your_git_username` and `you_git_PAT`:
 
 ```
-[url "https://your_git_username:your_git_PAT/"]
+[url "https://your_git_username:your_git_PAT@github.com/"]
   insteadof = https://github.com/
-[url "https://your_git_username:your_git_PAT/"]
+[url "https://your_git_username:your_git_PAT@github.com/"]
   insteadof = ssh://git@github.com/
-[url "https://your_git_username:your_git_PAT/"]
+[url "https://your_git_username:your_git_PAT@github.com/"]
   insteadof = git@github.com:
 ```
