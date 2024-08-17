@@ -40,8 +40,6 @@ Eventually want:
 
 
 ## Starting DB locally (WSL/linux)
-Login command (after completing setup): `psql -h localhost -d edibubble -U edibubble_admin -p 5432`
-
 Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf` if you use a different one from the default.
 
 1. Run `sudo -u postgres psql postgres` to log in.
@@ -51,12 +49,11 @@ Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf` if you 
   - If using cmd prompt to manage the repos, you'll need WSL/linux up so the db is actually running/avaialble
 
 
-### SQL to run on your machine when setting up a test DB
+#### SQL to run on your machine when setting up a test DB
 ```
 CREATE ROLE edibubble_admin LOGIN PASSWORD '*set_local_password_string_here*';
 CREATE DATABASE edibubble WITH OWNER = edibubble_admin;
 ```
-
 
 ## golang-migrate 
 After the database is set up, run the following while in the repo's root directory to create the tables:
@@ -74,8 +71,13 @@ To create more migration files, simply run this with new file names:
 Simply run `go run ./cmd/api` to start up the server.
 If tired of running into the Windows security popup, simply run `go build ./cmd/api && api.exe` so it will always run in the same folder, preventing the popup from repeated uses of running the server.
 
+## Commands often used in 
 
-### Where to continue in the book:
+`delete from verification_token where expires < NOW()::TIMESTAMP;` for clearing the verification tokens
+
+Login command: `psql -h localhost -d edibubble -U edibubble_admin -p 5432`
+
+### Book notes
 CRUD Operations
 
 *go back to `Validating JSON Input` > `Making validation rules reusable` for later validations*
