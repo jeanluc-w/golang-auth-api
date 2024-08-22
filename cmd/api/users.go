@@ -35,11 +35,6 @@ func (app *application) setUsernameHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	user := app.contextGetUser(r)
-	if user.Username == *input.Username {
-		app.logger.Error("setUsernameHandler - user already has that username")
-		app.badRequestResponse(w, r, data.ErrUsernameTaken)
-		return
-	}
 	user.Username = *input.Username
 
 	// Attmept to set the username to the account.
