@@ -56,7 +56,7 @@ func (u UserModel) SetUsername(user *User, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	if results[0].Exists() {
+	if len(results) > 0 {
 		logger.Info("SetUsername - username already exists on another account.")
 		return ErrUsernameTaken
 	}
@@ -81,9 +81,13 @@ func (u UserModel) GetUserID(sessionToken string, logger *slog.Logger) (*User, e
 		return nil, err
 	}
 	if len(results) > 0 {
-		if err := results[0].DataTo(&user); err != nil {
+		var userId struct {
+			ID string `firestore:"userId"`
+		}
+		if err := results[0].DataTo(&userId); err != nil {
 			return nil, err
 		}
+		user.ID = userId.ID
 		return &user, nil
 	}
 	return nil, ErrUserNotFound
