@@ -3,8 +3,7 @@
 
 ## Technologies To Use/Learn:
 - **[Golang](https://go.dev/doc/)**: Language for the APIs.
-- **[PostgreSQL](https://www.postgresql.org/docs/)**: Core database.
-- **[golang-migrate](https://github.com/golang-migrate/migrate)**: Used to setup SQL migrations.
+- **[Firestore](https://pkg.go.dev/cloud.google.com/go/firestore)**: Core database.
 
 
 ### Functionality:
@@ -38,44 +37,19 @@ Eventually want:
 | DELETE | /v1/list/restaurants/:id         | deleteListHandler               | Delete a user's restaurant list.                                 |
 | GET    | /v1/list/restaurants/:id/history | getRestaurantListHistoryHandler | Get the list's revision history so you know who made what edits. |
 
+## Setting up firebase locally
+Follow the following guide to install the Firebase CLI: [https://firebase.google.com/docs/cli](https://firebase.google.com/docs/cli)
 
-## Starting DB locally (WSL/linux)
-Get the port from `grep "port =" /etc/postgresql/*/main/postgresql.conf` if you use a different one from the default.
+Once the CLI is installed, you'll want to login with `firebase login` and then run `firebase init` to setup as a local emulator. During the init, you'll have to:
 
-1. Run `sudo -u postgres psql postgres` to log in.
-2. Copy the code from below and set the password.
-3. Update the `.env.local` in Web with the password so authjs can connect.
-4. (OPTIONAL) Log in as the user you just made while working on the DB directly.
-  - If using cmd prompt to manage the repos, you'll need WSL/linux up so the db is actually running/avaialble
-
-
-#### SQL to run on your machine when setting up a test DB
-```
-CREATE ROLE edibubble_admin LOGIN PASSWORD '*set_local_password_string_here*';
-CREATE DATABASE edibubble WITH OWNER = edibubble_admin;
-```
-
-## golang-migrate 
-After the database is set up, run the following while in the repo's root directory to create the tables:
-
-`migrate -path=./sql-migrations -database {database_connection_string_here} up`
-
-Swap `up` to `down` if you want to remove it. If you want a specific version, use `goto {version number}`.  If you encounter an error and the database becomes marked as "dirty", fix the sql error and use `force {version number}` to have it be marked clean again. 
-
-To create more migration files, simply run this with new file names:
-
-`migrate create -seq -ext=.sql -dir=./sql-migrations {file_name}`
-
+1. Select the Emulator for install.
+2. Connect to the Firebase project.
+3. Select the Firestore Emulator for install.
 
 ## Starting Golang (command prompt)
 Simply run `go run ./cmd/api` to start up the server.
 If tired of running into the Windows security popup, simply run `go build ./cmd/api && api.exe` so it will always run in the same folder, preventing the popup from repeated uses of running the server.
 
-## Commands often used in 
-
-`delete from verification_token where expires < NOW()::TIMESTAMP;` for clearing the verification tokens
-
-Login command: `psql -h localhost -d edibubble -U edibubble_admin -p 5432`
 
 ### Book notes
 CRUD Operations

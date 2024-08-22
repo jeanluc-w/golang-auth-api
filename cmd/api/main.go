@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	"cloud.google.com/go/firestore"
 	"github.com/joho/godotenv"
+	"google.golang.org/api/option"
 )
 
 const version = "1.0.0"
@@ -25,11 +26,6 @@ const version = "1.0.0"
 type config struct {
 	port int
 	env  string
-	db   struct {
-		dsn         string        // connection string
-		maxConns    string        // pool_max_conns
-		maxIdleTime time.Duration // pool_max_conn_idle_time
-	}
 	cors struct {
 		trustedOrigins []string
 	}
@@ -67,24 +63,19 @@ func main() {
 	}
 	cfg.env = getEnv("ENVIRONMENT", "dev")
 
-	// Set the Postgres connection string
-	cfg.db.dsn = os.Getenv("POSTGRES_CONNECTION_STRING")
-	if len(cfg.db.dsn) == 0 {
-		logger.Error("missing database connection string")
-		os.Exit(1)
-	}
-
 	// Get the list of allowed origins
 	cfg.cors.trustedOrigins = strings.Fields(getEnv("TRUSTED_CORS_ORIGINS", ""))
 	logger.Info(fmt.Sprintf("Allowing cross-origins: %s", cfg.cors))
 
-	// Initialize the DB connection pool and defer its closing to just before main() exits
-	dbpool, err := openDB(cfg)
+	// Start Firestore connection
+	ctx := context.Background()
+	opt := option.WithCredentialsFile("secrets/serviceAccountKey.json")
+	client, err := firestore.NewClient(ctx, getEnv("FIRESTORE_ID", ""), opt)
 	if err != nil {
 		logger.Error(err.Error())
 		os.Exit(1)
 	}
-	defer dbpool.Close()
+	defer client.Close()
 
 	logger.Info("database connection pool established")
 
@@ -93,7 +84,7 @@ func main() {
 	app := &application{
 		config: cfg,
 		logger: logger,
-		models: data.NewModels(dbpool),
+		models: data.NewModels(client),
 	}
 
 	// Declare the HTTP server
@@ -111,22 +102,4 @@ func main() {
 	err = srv.ListenAndServe()
 	logger.Error(err.Error())
 	os.Exit(1)
-}
-
-// Open the DB connection pool
-func openDB(cfg config) (*pgxpool.Pool, error) {
-	var err error
-	cfg.db.maxConns = getEnv("MAX_CONNS", "25")
-	cfg.db.maxIdleTime, err = time.ParseDuration(getEnv("MAX_IDLE_TIME", "10m"))
-	if err != nil {
-		return nil, err
-	}
-	configuredDsn := fmt.Sprintf("%s?pool_max_conns=%s&pool_max_conn_idle_time=%s", cfg.db.dsn, cfg.db.maxConns, cfg.db.maxIdleTime)
-	// Create the connection pool
-	pool, err := pgxpool.New(context.Background(), configuredDsn)
-	if err != nil {
-		return nil, err
-	}
-
-	return pool, nil
 }

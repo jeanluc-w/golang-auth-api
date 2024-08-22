@@ -35,6 +35,11 @@ func (app *application) setUsernameHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	user := app.contextGetUser(r)
+	if user.Username == *input.Username {
+		app.logger.Error("setUsernameHandler - user already has that username")
+		app.badRequestResponse(w, r, data.ErrUsernameTaken)
+		return
+	}
 	user.Username = *input.Username
 
 	// Attmept to set the username to the account.
@@ -61,23 +66,17 @@ func (app *application) setUsernameHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
-	// Get the ID from the request params. If it's not there or not a valid number, return 404
-	id, err := app.readIDParam(r)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
 	// Create a new instance of the User struct, containing the ID extracted from
 	// the URL and show some dummy data for now.
 	user := data.User{
-		ID:            id,
+		ID:            "1234",
 		Username:      "jlsw",
 		Name:          "John",
 		Email:         "test@test.com",
 		EmailVerified: false,
 		Image:         "https://lh3.googleusercontent.com/a/ACg8ocLymH4hqp1u2JDHWZd4q4TJjJq60a6UpF3EqfWAHIU7=s96-c",
 	}
-	err = app.writeJSON(w, http.StatusOK, envelope{"user": user}, nil)
+	err := app.writeJSON(w, http.StatusOK, envelope{"user": user}, nil)
 	if err != nil {
 		app.serverErrorResponse(w, r, err)
 	}

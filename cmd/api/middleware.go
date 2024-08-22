@@ -60,7 +60,7 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 		user, err := app.models.User.GetUserID(sessionToken, app.logger)
 		if err != nil {
 			switch {
-			case errors.Is(err, data.ErrNoRows):
+			case errors.Is(err, data.ErrUserNotFound):
 				app.logger.Error("authenticate - session is not valid")
 				app.sessionFailedAuthorizationResponse(w, r)
 			default:
