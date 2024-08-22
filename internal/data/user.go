@@ -11,13 +11,14 @@ import (
 
 var AnonymousUser = &User{}
 
+// Used for users collection
 type User struct {
-	ID            string `json:"id" firestore:"-"`
-	Username      string `json:"username" firestore:"username"`
-	Name          string `json:"name" firestore:"name"`
-	Email         string `json:"-" firestore:"email"`
-	EmailVerified bool   `json:"-" firestore:"emailVerified"`
-	Image         string `json:"profile_picture" firestore:"image"`
+	ID            string    `json:"id" firestore:"-"`
+	Username      string    `json:"username" firestore:"username"`
+	Name          string    `json:"name" firestore:"name"`
+	Email         string    `json:"-" firestore:"email"`
+	EmailVerified time.Time `json:"-" firestore:"emailVerified"`
+	Image         string    `json:"profile_picture" firestore:"image"`
 }
 
 type UserModel struct {
