@@ -5,6 +5,7 @@ import (
 	"edibubble/internal/validator"
 	"errors"
 	"net/http"
+	"time"
 )
 
 func (app *application) setUsernameHandler(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +69,7 @@ func (app *application) getUserHandler(w http.ResponseWriter, r *http.Request) {
 		Username:      "jlsw",
 		Name:          "John",
 		Email:         "test@test.com",
-		EmailVerified: false,
+		EmailVerified: time.Now(),
 		Image:         "https://lh3.googleusercontent.com/a/ACg8ocLymH4hqp1u2JDHWZd4q4TJjJq60a6UpF3EqfWAHIU7=s96-c",
 	}
 	err := app.writeJSON(w, http.StatusOK, envelope{"user": user}, nil)
