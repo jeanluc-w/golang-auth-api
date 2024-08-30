@@ -69,6 +69,13 @@ func main() {
 
 	// Start Firestore connection
 	ctx := context.Background()
+	if cfg.env != "prod" {
+		err = os.Setenv("FIRESTORE_EMULATOR_HOST", "127.0.0.1:8080")
+		if err != nil {
+			logger.Error(err.Error())
+			os.Exit(1)
+		}
+	}
 	opt := option.WithCredentialsFile("secrets/serviceAccountKey.json")
 	client, err := firestore.NewClient(ctx, getEnv("FIRESTORE_ID", ""), opt)
 	if err != nil {
