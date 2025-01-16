@@ -37,14 +37,24 @@ Eventually want:
 | DELETE | /v1/list/restaurants/:id         | deleteListHandler               | Delete a user's restaurant list.                                 |
 | GET    | /v1/list/restaurants/:id/history | getRestaurantListHistoryHandler | Get the list's revision history so you know who made what edits. |
 
-## Setting up firebase locally
+---
+
+## Firebase
+### Setting up local emulators
 Follow the following guide to install the Firebase CLI: [https://firebase.google.com/docs/cli](https://firebase.google.com/docs/cli)
 
+**Only run if you don't have the firebase.json and .firebaserc files**
 Once the CLI is installed, you'll want to login with `firebase login` and then run `firebase init` to setup as a local emulator. During the init, you'll have to:
 
 1. Select the Emulator for install.
 2. Connect to the Firebase project.
 3. Select the Firestore Emulator for install.
+
+### Running emulators
+
+`firebase emulators:start`
+
+---
 
 ## Starting Golang (command prompt)
 Simply run `go run ./cmd/api` to start up the server.
