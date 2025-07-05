@@ -1,3 +1,16 @@
+# Edibubble API
+
+## Technology to Learn/Use
+
+- Go: REST API Framework
+- PostgreSQL with PostGIS: Hosted on Railway
+- Redis: Caching and Real-Time Presence
+- JWT: Authentication with Refresh Token Support
+- pgx: Type-Safe DB Access
+- Golang-Migrate: Schema Migrations
+- Zap: Structured Logging
+- Gorilla WebSockets: Real-Time Chat and Updates
+
 # Installation
 
 ## macOS/Linux:
