@@ -4,7 +4,9 @@ CREATE TABLE users (
   email TEXT UNIQUE NOT NULL,
   username TEXT UNIQUE,
   display_name TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  is_active BOOLEAN DEFAULT TRUE,
+  last_login TIMESTAMPTZ
 );
 
 -- Enforce username regex using check constraint
@@ -19,44 +21,16 @@ CREATE TABLE auth_identities (
   provider TEXT NOT NULL,  -- 'email', 'google', 'apple', etc.
   provider_user_id TEXT NOT NULL,
   password_hash TEXT, -- only for 'email' provider
+  created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE(provider, provider_user_id)
 );
 
--- Restaurants
-CREATE TABLE restaurants (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  location GEOGRAPHY(POINT, 4326),
-  description TEXT,
-  created_by UUID REFERENCES users(id),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Lists
-CREATE TABLE lists (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title TEXT NOT NULL,
-  visibility TEXT NOT NULL DEFAULT 'private',
-  owner_id UUID REFERENCES users(id),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- List Items
-CREATE TABLE list_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  list_id UUID REFERENCES lists(id),
-  restaurant_id UUID REFERENCES restaurants(id),
-  added_by UUID REFERENCES users(id),
-  note TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Reviews
-CREATE TABLE reviews (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+-- Session management
+CREATE TABLE sessions (
+  id UUID PRIMARY KEY,
   user_id UUID REFERENCES users(id),
-  restaurant_id UUID REFERENCES restaurants(id),
-  rating TEXT NOT NULL CHECK (rating IN ('Not for Me', 'Like It', 'Love It')),
-  comment TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  ip TEXT,
+  user_agent TEXT,
+  metadata JSONB
 );
