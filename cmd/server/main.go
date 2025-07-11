@@ -10,8 +10,6 @@ import (
 
 	"edibubble-api/config"
 	"edibubble-api/internal/handlers"
-	"edibubble-api/internal/middleware"
-	"edibubble-api/internal/sessions"
 )
 
 func main() {
@@ -30,26 +28,13 @@ func main() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	// Init session tracker
-	sessionTracker := sessions.NewTracker()
-
 	// Define routes
 	router := httprouter.New()
 	router.GET("/healthcheck", handlers.HealthCheckHandler)
 
 	// Wrap with middleware chain
-	handler := middleware.JSONMiddleware(
-		middleware.CORSMiddleware(
-			middleware.SentryRecoveryMiddleware(
-				middleware.LoggerMiddleware(logger)(
-					sessions.SessionMiddleware(sessionTracker)(
-						router,
-					),
-				),
-			),
-		),
-	)
+	handler := utils.buildHandlerStack(cfg, router, logger)
 
-	log.Printf("Server running on port %s", cfg.Port)
+	log.Printf("Server running on port %s [env=%s]", cfg.Port, cfg.Env)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, handler))
 }

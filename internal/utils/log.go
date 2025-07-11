@@ -7,17 +7,17 @@ import (
 )
 
 // LogInfo logs an info-level message with request and session info.
-func LogInfo(logger *zap.Logger, r *http.Request, message string, fields ...zap.Field) {
+func Info(logger *zap.Logger, r *http.Request, message string, fields ...zap.Field) {
 	logger.Info(message, buildFields(r, fields...)...)
 }
 
 // LogWarn logs a warning-level message with request and session info.
-func LogWarn(logger *zap.Logger, r *http.Request, message string, fields ...zap.Field) {
+func Warn(logger *zap.Logger, r *http.Request, message string, fields ...zap.Field) {
 	logger.Warn(message, buildFields(r, fields...)...)
 }
 
 // LogError logs an error-level message with request and session info.
-func LogError(logger *zap.Logger, r *http.Request, message string, fields ...zap.Field) {
+func Error(logger *zap.Logger, r *http.Request, message string, fields ...zap.Field) {
 	logger.Error(message, buildFields(r, fields...)...)
 }
 
@@ -29,11 +29,20 @@ func buildFields(r *http.Request, fields ...zap.Field) []zap.Field {
 			sessionID = s
 		}
 	}
+	requestID := ""
+	if v := r.Context().Value("request_id"); v != nil {
+		if s, ok := v.(string); ok {
+			requestID = s
+		}
+	}
+
 	baseFields := []zap.Field{
 		zap.String("method", r.Method),
 		zap.String("path", r.URL.Path),
 		zap.String("remote_addr", r.RemoteAddr),
 		zap.String("session_id", sessionID),
+		zap.String("request_id", requestID),
+		zap.String("user_agent", r.UserAgent()),
 	}
 	return append(baseFields, fields...)
 }
