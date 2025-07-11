@@ -33,7 +33,7 @@ func main() {
 	router.GET("/healthcheck", handlers.HealthCheckHandler)
 
 	// Wrap with middleware chain
-	handler := utils.buildHandlerStack(cfg, router, logger)
+	handler := handlers.buildHandlerStack(cfg, router, logger)
 
 	log.Printf("Server running on port %s [env=%s]", cfg.Port, cfg.Env)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, handler))

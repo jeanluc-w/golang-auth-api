@@ -13,7 +13,7 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 		if reqID == "" {
 			reqID = uuid.NewString()
 		}
-		ctx := context.WithValue(r.Context(), "requestID", reqID)
+		ctx := context.WithValue(r.Context(), "request_id", reqID)
 		w.Header().Set("X-Request-ID", reqID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
