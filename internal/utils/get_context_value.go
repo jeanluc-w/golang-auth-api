@@ -1,11 +1,23 @@
 package utils
 
-import "net/http"
+import (
+	"net/http"
+	"time"
 
-func GetContextValue(r *http.Request, key string, defaultValue string) string {
-	val := r.Context().Value(key)
-	if s, ok := val.(string); ok {
-		return s
+	"edibubble-api/internal/models"
+)
+
+func GetContextString(r *http.Request, key models.ContextKey, fallback string) string {
+	if val, ok := r.Context().Value(key).(string); ok {
+		return val
 	}
-	return defaultValue
+	return fallback
+}
+
+func GetContextTime(r *http.Request, key models.ContextKey) time.Time {
+	if val, ok := r.Context().Value(key).(time.Time); ok {
+		return val
+	}
+	// Default to current time
+	return time.Now()
 }

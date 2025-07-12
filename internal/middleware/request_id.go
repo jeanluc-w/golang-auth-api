@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"edibubble-api/internal/models"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -13,7 +14,7 @@ func RequestIDMiddleware(next http.Handler) http.Handler {
 		if reqID == "" {
 			reqID = uuid.NewString()
 		}
-		ctx := context.WithValue(r.Context(), "request_id", reqID)
+		ctx := context.WithValue(r.Context(), models.RequestContextKey, reqID)
 		w.Header().Set("X-Request-ID", reqID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

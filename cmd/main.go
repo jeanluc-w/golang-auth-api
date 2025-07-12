@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/julienschmidt/httprouter"
@@ -10,6 +11,7 @@ import (
 
 	"edibubble-api/config"
 	"edibubble-api/internal/handlers"
+	"edibubble-api/internal/server"
 )
 
 func main() {
@@ -25,7 +27,10 @@ func main() {
 	defer sentry.Flush(cfg.SentryFlushTimeout)
 
 	// Init Zap logger
-	logger, _ := zap.NewProduction()
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Failed to initialize zap logger: %v", err)
+	}
 	defer logger.Sync()
 
 	// Define routes
@@ -33,8 +38,17 @@ func main() {
 	router.GET("/healthcheck", handlers.HealthCheckHandler)
 
 	// Wrap with middleware chain
-	handler := handlers.buildHandlerStack(cfg, router, logger)
+	handler := handlers.BuildHandlerStack(cfg, router, logger)
 
-	log.Printf("Server running on port %s [env=%s]", cfg.Port, cfg.Env)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, handler))
+	// Create server
+	srv := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start with graceful shutdown
+	server.Start(srv, 15*time.Second)
 }

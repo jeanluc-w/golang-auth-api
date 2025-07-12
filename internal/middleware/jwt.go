@@ -1,11 +1,106 @@
 package middleware
 
-import "net/http"
+import (
+	"context"
+	"edibubble-api/config"
+	"edibubble-api/internal/models"
+	"edibubble-api/internal/sessions"
+	"edibubble-api/internal/utils"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
 
-func JWTMiddleware(next http.Handler) http.Handler {
-	// TODO: add auth logic of verifying JWT, decoding it, verify session exists in db and is valid,
-	// pass session id to the request context, and then adding user info to the request context.
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-	})
+	"github.com/golang-jwt/jwt/v5"
+)
+
+var openRoutes = map[string]bool{
+	"/auth/login":   true,
+	"/auth/join":    true,
+	"/auth/refresh": true,
+	"/healthcheck":  true,
+}
+
+func JWTMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Ignore the routes where they are open to anyone
+			if openRoutes[r.URL.Path] {
+				next.ServeHTTP(w, r)
+				return
+			}
+			// Verify the auth header is in Authorization Token format
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+				utils.JSONError(w, http.StatusUnauthorized, "Missing or malformed Authorization header")
+				return
+			}
+
+			// Parse the JWT token from the header
+			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+			token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+				}
+				return []byte(cfg.JWTSecret), nil
+			})
+
+			if err != nil || !token.Valid {
+				utils.JSONError(w, http.StatusUnauthorized, "Invalid token")
+				return
+			}
+
+			claims, ok := token.Claims.(jwt.MapClaims)
+			if !ok {
+				utils.JSONError(w, http.StatusUnauthorized, "Invalid claims")
+				return
+			}
+
+			// Extract claims
+			sessionID, _ := claims["session_id"].(string)
+			userID, _ := claims["user_id"].(string)
+			username, _ := claims["username"].(string)
+			email, _ := claims["email"].(string)
+			role, _ := claims["role"].(string)
+			status, _ := claims["status"].(string)
+			expFloat, ok := claims["exp"].(float64)
+			if !ok {
+				utils.JSONError(w, http.StatusUnauthorized, "Missing expiration claim")
+				return
+			}
+			exp := time.Unix(int64(expFloat), 0)
+
+			// Verify the essential claims are there
+			if userID == "" || sessionID == "" {
+				utils.JSONError(w, http.StatusUnauthorized, "Missing token claims")
+				return
+			}
+			// Verify user isn't banned nor disabled
+			if status == "banned" {
+				utils.JSONError(w, http.StatusForbidden, "Account banned")
+				return
+			}
+			if status == "disabled" {
+				utils.JSONError(w, http.StatusForbidden, "Account disabled")
+				return
+			}
+			// Verify session exists and isn't revoked
+			if !sessions.IsValidSession(sessionID, exp, cfg.RedisClient) {
+				utils.JSONError(w, http.StatusUnauthorized, "Session expired or invalid")
+				return
+			}
+
+			user := &models.UserContext{
+				ID:        userID,
+				Username:  username,
+				Email:     email,
+				Role:      role,
+				SessionID: sessionID,
+				Status:    status,
+			}
+
+			ctx := context.WithValue(r.Context(), models.UserContextKey, user)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
