@@ -71,7 +71,7 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 
 			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 
-			// Set panic log for Sentry
+			// Set panic log for Sentry and Zap
 			defer func() {
 				duration := time.Since(start)
 				if err := recover(); err != nil {

@@ -62,7 +62,6 @@ func JWTMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 			username, _ := claims["username"].(string)
 			email, _ := claims["email"].(string)
 			role, _ := claims["role"].(string)
-			status, _ := claims["status"].(string)
 			expFloat, ok := claims["exp"].(float64)
 			if !ok {
 				utils.JSONError(w, http.StatusUnauthorized, "Missing expiration claim")
@@ -75,15 +74,7 @@ func JWTMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 				utils.JSONError(w, http.StatusUnauthorized, "Missing token claims")
 				return
 			}
-			// Verify user isn't banned nor disabled
-			if status == "banned" {
-				utils.JSONError(w, http.StatusForbidden, "Account banned")
-				return
-			}
-			if status == "disabled" {
-				utils.JSONError(w, http.StatusForbidden, "Account disabled")
-				return
-			}
+
 			// Verify session exists and isn't revoked
 			if !sessions.IsValidSession(sessionID, exp, cfg.RedisClient) {
 				utils.JSONError(w, http.StatusUnauthorized, "Session expired or invalid")
@@ -96,7 +87,6 @@ func JWTMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 				Email:     email,
 				Role:      role,
 				SessionID: sessionID,
-				Status:    status,
 			}
 
 			ctx := context.WithValue(r.Context(), models.UserContextKey, user)

@@ -5,6 +5,5 @@ type UserContext struct {
 	Username  string
 	Email     string
 	SessionID string
-	Status    string
 	Role      string
 }
