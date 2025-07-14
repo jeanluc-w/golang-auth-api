@@ -4,7 +4,6 @@ import (
 	"context"
 	"edibubble-api/config"
 	"edibubble-api/internal/models"
-	"edibubble-api/internal/sessions"
 	"edibubble-api/internal/utils"
 	"fmt"
 	"net/http"
@@ -76,7 +75,7 @@ func JWTMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 			}
 
 			// Verify session exists and isn't revoked
-			if !sessions.IsValidSession(sessionID, exp, cfg.RedisClient) {
+			if !utils.IsValidSession(sessionID, exp, cfg.RedisClient) {
 				utils.JSONError(w, http.StatusUnauthorized, "Session expired or invalid")
 				return
 			}
