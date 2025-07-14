@@ -38,42 +38,31 @@ func RateLimitMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			logger := utils.GetLogger(r.Context())
+			ctx := r.Context()
 			key := extractRateKey(r)
-			limitCtx, err := limiterInstance.Get(r.Context(), key)
+			limitCtx, err := limiterInstance.Get(ctx, key)
 			if err != nil {
-				utils.JSONError(w, http.StatusInternalServerError, "Rate limiter error")
+				utils.LogError(ctx, "Could not get rate limiter in middleware", zap.Error(err))
+				utils.JSONError(w, http.StatusInternalServerError, "An unkown server error ocurred.")
 				return
 			}
 
-			logger.Info("Rate limiting check",
-				zap.String("rate_key", key),
-				zap.Int64("limit", limitCtx.Limit),
-				zap.Int64("remaining", limitCtx.Remaining),
-				zap.Int64("reset", limitCtx.Reset),
-			)
+			utils.LogInfo(ctx, "Rate limiting check", zap.String("rate_key", key))
 
 			// Report when people are exceeding and return an error
 			if limitCtx.Reached {
+				// Send error to Sentry
 				sentry.WithScope(func(scope *sentry.Scope) {
+					scope.SetLevel(sentry.LevelWarning)
 					scope.SetTag("rate_key", key)
-					scope.SetTag("path", r.URL.Path)
-					scope.SetTag("method", r.Method)
 					scope.SetExtra("limit", limitCtx.Limit)
 					scope.SetExtra("remaining", limitCtx.Remaining)
 					scope.SetExtra("reset", limitCtx.Reset)
-					scope.SetExtra("remote_addr", r.RemoteAddr)
-					scope.SetLevel(sentry.LevelWarning)
 				})
 				sentry.CaptureMessage("Rate limit exceeded")
 
-				// Log locally
-				logger.Warn("Rate limit exceeded",
-					zap.String("path", r.URL.Path),
-					zap.String("method", r.Method),
-					zap.String("rate_key", key),
-				)
-
+				// Log locally and return an error
+				utils.LogWarn(ctx, "Rate limit exceeded", zap.String("rate_key", key))
 				utils.JSONError(w, http.StatusTooManyRequests, "Rate limit exceeded")
 				return
 			}

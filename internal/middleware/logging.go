@@ -36,13 +36,14 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 			// Start timer and save to context
 			start := time.Now()
 
-			// Initialize context with start time
+			// Initialize context with the request's start time saved
 			ctx := context.WithValue(r.Context(), models.StartTimeContextKey, start)
 
 			// Extract user context and request ID
 			requestID := utils.GetContextString(r, models.RequestContextKey, "")
 			userCtx, _ := r.Context().Value(models.UserContextKey).(*models.UserContext)
 
+			// Create the dynamic Zap logger with useful fields always attached to any logs.
 			reqLogger := logger.With(
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
@@ -51,27 +52,33 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				zap.String("user_id", safe(userCtx, func(u *models.UserContext) string { return u.ID })),
 				zap.String("remote_addr", r.RemoteAddr),
 			)
+			// Save that logger to the context
 			ctx = context.WithValue(ctx, models.LoggerContextKey, &utils.DynamicLogger{
 				Base:      reqLogger,
 				StartTime: start,
 			})
 
-			// Update the request with modified context
+			// Update the request with the logger and start time attached.
 			r = r.WithContext(ctx)
 
-			// Update Sentry scope pre-request
+			// Update Sentry scope pre-request so the tags are always set
 			sentry.ConfigureScope(func(scope *sentry.Scope) {
-				scope.SetTag("request_id", requestID)
+				scope.SetTag("method", r.Method)
 				scope.SetTag("path", r.URL.Path)
+				scope.SetTag("request_id", requestID)
 				scope.SetUser(sentry.User{
 					ID:        safe(userCtx, func(u *models.UserContext) string { return u.ID }),
 					IPAddress: r.RemoteAddr,
+					Data: map[string]string{
+						"session_id": safe(userCtx, func(u *models.UserContext) string { return u.SessionID }),
+					},
 				})
+				scope.SetTag("user_role", safe(userCtx, func(u *models.UserContext) string { return u.Role }))
 			})
 
 			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 
-			// Set panic log for Sentry and Zap
+			// Set panic loggers for Sentry and Zap.
 			defer func() {
 				duration := time.Since(start)
 				if err := recover(); err != nil {

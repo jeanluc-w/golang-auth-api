@@ -32,7 +32,7 @@ func JSONResponse(w http.ResponseWriter, status int, payload any) {
 	_, _ = w.Write(output)
 }
 
-// Handle error responses
+// Simplified error response handler
 func JSONError(w http.ResponseWriter, status int, message string) {
 	JSONResponse(w, status, map[string]string{
 		"error": message,
