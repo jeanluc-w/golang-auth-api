@@ -58,7 +58,6 @@ func JWTMiddleware(next http.Handler) http.Handler {
 		sessionID, _ := claims["session_id"].(string)
 		userID, _ := claims["user_id"].(string)
 		username, _ := claims["username"].(string)
-		email, _ := claims["email"].(string)
 		role, _ := claims["role"].(string)
 		expFloat, ok := claims["exp"].(float64)
 		if !ok {
@@ -82,7 +81,6 @@ func JWTMiddleware(next http.Handler) http.Handler {
 		user := &models.UserContext{
 			ID:        userID,
 			Username:  username,
-			Email:     email,
 			Role:      role,
 			SessionID: sessionID,
 		}

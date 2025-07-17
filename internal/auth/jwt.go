@@ -8,17 +8,16 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// Claims defines the custom JWT claims structure
+// JWT Claims
 type Claims struct {
 	SessionID string `json:"session_id"`
 	UserID    string `json:"user_id"`
 	Username  string `json:"username"`
-	Email     string `json:"email"`
 	Role      string `json:"role"`
 	jwt.RegisteredClaims
 }
 
-// GenerateJWT generates a signed JWT token with custom claims
+// Generate a signed JWT token with our custom claims
 func GenerateJWT(sessionID, userID, username, email, role string, ttl time.Duration) (string, error) {
 	secret := config.Loaded.JWTSecret
 	if secret == "" {
@@ -29,7 +28,6 @@ func GenerateJWT(sessionID, userID, username, email, role string, ttl time.Durat
 		SessionID: sessionID,
 		UserID:    userID,
 		Username:  username,
-		Email:     email,
 		Role:      role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "edibubble-api",
