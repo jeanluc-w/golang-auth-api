@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7
+    container_name: edibubble_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - edibubble-net
+
+  postgres:
+    image: postgres:16
+    container_name: edibubble_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: superlongsecretpassword
+      POSTGRES_DB: edibubble
+    ports:
+      - "5432:5432"
+    networks:
+      - edibubble-net
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:
+
+networks:
+  edibubble-net:
+    driver: bridge

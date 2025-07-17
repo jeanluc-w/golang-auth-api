@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/redis/go-redis/v9"
 	"github.com/ulule/limiter/v3"
@@ -15,6 +16,7 @@ import (
 type Config struct {
 	Env                string
 	Port               string
+	PGPool             *pgxpool.Pool
 	SentryDSN          string
 	SentrySampleRate   float64
 	SentryFlushTimeout time.Duration
@@ -32,11 +34,13 @@ func Load() *Config {
 	timeout := parseIntConfig("REQUEST_TIMEOUT_SECONDS", "10")
 	limit := parseIntConfig("REQUEST_RATE_LIMIT", "10")
 
-	// Establish and verify structures
+	// Establish rate limiter
 	ratelimit := limiter.Rate{
 		Period: time.Minute,
 		Limit:  limit,
 	}
+
+	// Establish and ping the Redis Client
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:        requireStringConfig("REDIS_ADDR"),
 		DB:          0,
@@ -46,17 +50,29 @@ func Load() *Config {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 
+	// Create pgx pool
+	dsn := requireStringConfig("DATABASE_URL")
+	pgPool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+	}
+	// Ping to verify connection
+	if err := pgPool.Ping(context.Background()); err != nil {
+		log.Fatalf("PostgreSQL ping failed: %v", err)
+	}
+
 	// Return the completed configuration if successful with everything
 	return &Config{
 		Env:                getStringConfig("ENV", "development"),
 		Port:               getStringConfig("PORT", "8080"),
+		PGPool:             pgPool,
 		SentryDSN:          requireStringConfig("SENTRY_DSN"),
 		SentrySampleRate:   sentry_rate,
 		SentryFlushTimeout: 2 * time.Second,
 		RedisClient:        redisClient,
 		RequestTimeout:     time.Duration(timeout * int64(time.Second)),
 		RateLimit:          ratelimit,
-		JWTSecret:          requireStringConfig("JWTSecret"),
+		JWTSecret:          requireStringConfig("JWT_SECRET"),
 	}
 }
 
