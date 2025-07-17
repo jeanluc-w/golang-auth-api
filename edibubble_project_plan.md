@@ -28,7 +28,7 @@ Create an inclusive and scalable social networking app centered around food disc
 - **PostgreSQL with PostGIS** (via Neon or Railway)
 - **Redis** (future: caching and presence)
 - **JWT Auth** with refresh token flow
-- **sqlc** or `pgx` (type-safe DB access)
+- **sqlc** and `pgx` (type-safe DB access)
 - **Golang-Migrate** (schema management)
 - **Zap** (structured logging)
 - **WebSockets (Gorilla)** (for chat and real-time location)
