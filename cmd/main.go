@@ -36,7 +36,8 @@ func main() {
 
 	// Define routes
 	router := httprouter.New()
-	router.GET("/healthcheck", handlers.HealthCheckHandler)
+
+	router.GET("/v1/healthcheck", handlers.HealthCheckHandler)
 
 	// Wrap with middleware chain
 	handler := handlers.BuildHandlerStack(router, logger)
