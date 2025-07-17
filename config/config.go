@@ -13,6 +13,8 @@ import (
 	"github.com/ulule/limiter/v3"
 )
 
+var Loaded *Config
+
 type Config struct {
 	Env                string
 	Port               string
@@ -62,7 +64,7 @@ func Load() *Config {
 	}
 
 	// Return the completed configuration if successful with everything
-	return &Config{
+	Loaded = &Config{
 		Env:                getStringConfig("ENV", "development"),
 		Port:               getStringConfig("PORT", "8080"),
 		PGPool:             pgPool,
@@ -74,6 +76,7 @@ func Load() *Config {
 		RateLimit:          ratelimit,
 		JWTSecret:          requireStringConfig("JWT_SECRET"),
 	}
+	return nil
 }
 
 func parseFloatConfig(key, fallback string) float64 {

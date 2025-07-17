@@ -1,12 +1,13 @@
 package middleware
 
 import (
+	"edibubble-api/config"
 	"net/http"
-	"time"
 )
 
-func TimeoutMiddleware(duration time.Duration) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.TimeoutHandler(next, duration, `{"error":"request timeout"}`)
-	}
+func TimeoutMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.TimeoutHandler(next, config.Loaded.RequestTimeout, `{"error":"request timeout"}`)
+		next.ServeHTTP(w, r)
+	})
 }

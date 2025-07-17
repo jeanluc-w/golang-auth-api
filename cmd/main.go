@@ -15,17 +15,17 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	config.Load()
 
 	// Init Sentry
 	if err := sentry.Init(sentry.ClientOptions{
 		EnableTracing:    true,
-		Dsn:              cfg.SentryDSN,
-		TracesSampleRate: cfg.SentrySampleRate,
+		Dsn:              config.Loaded.SentryDSN,
+		TracesSampleRate: config.Loaded.SentrySampleRate,
 	}); err != nil {
 		log.Fatalf("Sentry init failed: %v", err)
 	}
-	defer sentry.Flush(cfg.SentryFlushTimeout)
+	defer sentry.Flush(config.Loaded.SentryFlushTimeout)
 
 	// Init Zap logger
 	logger, err := zap.NewProduction()
@@ -39,11 +39,11 @@ func main() {
 	router.GET("/healthcheck", handlers.HealthCheckHandler)
 
 	// Wrap with middleware chain
-	handler := handlers.BuildHandlerStack(cfg, router, logger)
+	handler := handlers.BuildHandlerStack(router, logger)
 
 	// Create server
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
+		Addr:         ":" + config.Loaded.Port,
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
