@@ -2,15 +2,10 @@ package middleware
 
 import (
 	"context"
-	"edibubble-api/config"
+	"edibubble-api/internal/auth"
 	"edibubble-api/internal/models"
 	"edibubble-api/internal/utils"
-	"fmt"
 	"net/http"
-	"strings"
-	"time"
-
-	"github.com/golang-jwt/jwt/v5"
 )
 
 var openRoutes = map[string]bool{
@@ -27,62 +22,11 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// Verify the auth header is in Authorization Token format
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			utils.JSONError(w, http.StatusUnauthorized, "Missing or malformed Authorization header")
+		// Verify the JWT token and get back the user object if successful
+		user, err := auth.VerifyJWT(r.Header.Get("Authorization"))
+		if err != nil {
+			utils.JSONError(w, http.StatusUnauthorized, err.Error())
 			return
-		}
-
-		// Parse the JWT token from the header
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-			}
-			return []byte(config.Loaded.JWTSecret), nil
-		})
-
-		if err != nil || !token.Valid {
-			utils.JSONError(w, http.StatusUnauthorized, "Invalid token")
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			utils.JSONError(w, http.StatusUnauthorized, "Invalid claims")
-			return
-		}
-
-		// Extract claims
-		sessionID, _ := claims["session_id"].(string)
-		userID, _ := claims["user_id"].(string)
-		username, _ := claims["username"].(string)
-		role, _ := claims["role"].(string)
-		expFloat, ok := claims["exp"].(float64)
-		if !ok {
-			utils.JSONError(w, http.StatusUnauthorized, "Missing expiration claim")
-			return
-		}
-		exp := time.Unix(int64(expFloat), 0)
-
-		// Verify the essential claims are there
-		if userID == "" || sessionID == "" {
-			utils.JSONError(w, http.StatusUnauthorized, "Missing token claims")
-			return
-		}
-
-		// Verify session exists and isn't revoked
-		if !utils.IsValidSession(sessionID, exp, config.Loaded.RedisClient) {
-			utils.JSONError(w, http.StatusUnauthorized, "Session expired or invalid")
-			return
-		}
-
-		user := &models.UserContext{
-			ID:        userID,
-			Username:  username,
-			Role:      role,
-			SessionID: sessionID,
 		}
 
 		ctx := context.WithValue(r.Context(), models.UserContextKey, user)
