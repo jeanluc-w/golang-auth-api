@@ -124,16 +124,3 @@ Simply run `go run cmd/server` to start up the server.
 
 ## Windows (Command Prompt):
 If running into the Windows security popup, simply run `go build cmd/server && server.exe` so it will always run in the same folder, preventing the popup from repeated uses of running the program. Otherwise, `go run cmd/server` works as well
-
-# Useful global config for github:
-
-Do `git config --list --show-origin` to see where your global git config is located. Once found, add these lines to the bottom and replace the values for `your_git_username` and `you_git_PAT`:
-
-```
-[url "https://your_git_username:your_git_PAT@github.com/"]
-  insteadof = https://github.com/
-[url "https://your_git_username:your_git_PAT@github.com/"]
-  insteadof = ssh://git@github.com/
-[url "https://your_git_username:your_git_PAT@github.com/"]
-  insteadof = git@github.com:
-```

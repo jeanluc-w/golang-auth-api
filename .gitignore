@@ -64,4 +64,4 @@ node_modules/
 secrets/
 
 # Local testing build of service
-api.exe
+*.exe

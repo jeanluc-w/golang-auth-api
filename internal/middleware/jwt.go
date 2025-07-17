@@ -4,15 +4,13 @@ import (
 	"context"
 	"edibubble-api/internal/auth"
 	"edibubble-api/internal/models"
+	"edibubble-api/internal/server"
 	"edibubble-api/internal/utils"
 	"net/http"
 )
 
 var openRoutes = map[string]bool{
-	"/auth/login":   true,
-	"/auth/join":    true,
-	"/auth/refresh": true,
-	"/healthcheck":  true,
+	server.V1_HealthCheck: true,
 }
 
 func JWTMiddleware(next http.Handler) http.Handler {
