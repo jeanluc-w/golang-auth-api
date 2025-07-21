@@ -46,7 +46,7 @@ func RateLimitMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		utils.LogInfo(ctx, "Rate limiting check", zap.String("rate_key", key))
+		utils.LogDebug(ctx, "Rate limiting check", zap.String("rate_key", key))
 
 		// Report when people are exceeding and return an error
 		if limitCtx.Reached {

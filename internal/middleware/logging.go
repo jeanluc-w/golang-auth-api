@@ -30,6 +30,14 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
+// Safe env accessor helper
+func safe[T any](v *T, get func(*T) string) string {
+	if v == nil {
+		return ""
+	}
+	return get(v)
+}
+
 func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,8 +53,8 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 
 			// Create the dynamic Zap logger with useful fields always attached to any logs.
 			reqLogger := logger.With(
-				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
+				zap.String("method", r.Method),
 				zap.String("request_id", requestID),
 				zap.String("session_id", safe(userCtx, func(u *models.UserContext) string { return u.SessionID })),
 				zap.String("user_id", safe(userCtx, func(u *models.UserContext) string { return u.ID })),
@@ -111,12 +119,4 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(rw, r)
 		})
 	}
-}
-
-// Safe accessor helper
-func safe[T any](v *T, get func(*T) string) string {
-	if v == nil {
-		return ""
-	}
-	return get(v)
 }

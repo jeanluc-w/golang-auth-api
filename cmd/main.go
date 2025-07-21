@@ -1,13 +1,11 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/julienschmidt/httprouter"
-	"go.uber.org/zap"
 
 	"edibubble-api/config"
 	"edibubble-api/internal/handlers"
@@ -18,28 +16,18 @@ func main() {
 	config.Load()
 
 	// Init Sentry
-	if err := sentry.Init(sentry.ClientOptions{
-		EnableTracing:    true,
-		Dsn:              config.Loaded.SentryDSN,
-		TracesSampleRate: config.Loaded.SentrySampleRate,
-	}); err != nil {
-		log.Fatalf("Sentry init failed: %v", err)
-	}
+	config.InitSentry(config.Loaded.SentryDSN, config.Loaded.SentrySampleRate)
 	defer sentry.Flush(config.Loaded.SentryFlushTimeout)
 
 	// Init Zap logger
-	logger, err := zap.NewProduction()
-	if err != nil {
-		log.Fatalf("Failed to initialize zap logger: %v", err)
-	}
+	logger := config.InitLogger(config.Loaded.Env)
 	defer logger.Sync()
 
-	// Define routes
+	// Define API routes
 	router := httprouter.New()
-
 	router.GET(server.V1_HealthCheck, handlers.HealthCheckHandler)
 
-	// Wrap with middleware chain
+	// Wrap with middlewares
 	handler := handlers.BuildHandlerStack(router, logger)
 
 	// Create server
