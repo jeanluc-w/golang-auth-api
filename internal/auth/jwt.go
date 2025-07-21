@@ -12,8 +12,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// JWT Claims
-
 // Generate a signed JWT token with our custom claims
 func GenerateJWT(sessionID, userID, username, email, role string, ttl time.Duration) (string, error) {
 	secret := config.Loaded.JWTSecret
@@ -21,7 +19,7 @@ func GenerateJWT(sessionID, userID, username, email, role string, ttl time.Durat
 		return "", errors.New("JWT secret not configured")
 	}
 
-	claims := models.Claims{
+	claims := models.JWTClaims{
 		SessionID: sessionID,
 		UserID:    userID,
 		Username:  username,
@@ -46,7 +44,7 @@ func VerifyJWT(authHeader string) (*models.UserContext, error) {
 
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
-	token, err := jwt.ParseWithClaims(tokenStr, &models.Claims{}, func(t *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &models.JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
@@ -56,7 +54,7 @@ func VerifyJWT(authHeader string) (*models.UserContext, error) {
 		return nil, errors.New("invalid token")
 	}
 
-	claims, ok := token.Claims.(*models.Claims)
+	claims, ok := token.Claims.(*models.JWTClaims)
 	if !ok {
 		return nil, errors.New("invalid claims")
 	}
