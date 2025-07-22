@@ -1,19 +1,27 @@
 package utils
 
 import (
+	"edibubble-api/config"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/getsentry/sentry-go"
 	"go.uber.org/zap"
 )
 
-// Use a global toggle for pretty output in development
-var prettyPrint = os.Getenv("ENV") == "development"
+// Custom error messages for response handling
+var (
+	ErrRequestTooLarge = errors.New("request body too large")
+	ErrMalformedJSON   = errors.New("malformed JSON")
+	ErrEmptyBody       = errors.New("request body is empty")
+	ErrExtraData       = errors.New("request body must only contain a single JSON object")
+)
+
+// Default maximum amount of bytes for JSON request bodies
+const defaultMaxJSONBytes int64 = 8 << 10 // 8 KB
 
 // Handle any JSON response with proper headers and formatting.
 func JSONResponse(w http.ResponseWriter, status int, payload any) {
@@ -23,7 +31,7 @@ func JSONResponse(w http.ResponseWriter, status int, payload any) {
 	var output []byte
 	var err error
 
-	if prettyPrint {
+	if config.Loaded.Env == "development" {
 		output, err = json.MarshalIndent(payload, "", "  ")
 	} else {
 		output, err = json.Marshal(payload)
@@ -45,29 +53,28 @@ func JSONError(w http.ResponseWriter, status int, message string) {
 	})
 }
 
-var (
-	ErrRequestTooLarge = errors.New("request body too large")
-	ErrMalformedJSON   = errors.New("malformed JSON")
-	ErrEmptyBody       = errors.New("request body is empty")
-	ErrExtraData       = errors.New("request body must only contain a single JSON object")
-)
-
 // decodeJSONBody decodes JSON from request with a max size limit.
-func decodeJSONBody(r *http.Request, dst interface{}, maxBytes int64) error {
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}, maxBytes int64) error {
 	// Limit the size of the request body
-	r.Body = http.MaxBytesReader(nil, r.Body, maxBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(dst); err != nil {
+		var syntaxError *json.SyntaxError
+		var unmarshalTypeError *json.UnmarshalTypeError
 		switch {
-		case strings.Contains(err.Error(), "http: request body too large"):
-			return ErrRequestTooLarge
 		case errors.Is(err, io.EOF):
 			return ErrEmptyBody
+		case errors.As(err, &syntaxError):
+			return ErrMalformedJSON
+		case errors.As(err, &unmarshalTypeError):
+			return ErrMalformedJSON
 		case strings.HasPrefix(err.Error(), "json: unknown field "):
 			return ErrMalformedJSON
+		case strings.Contains(err.Error(), "http: request body too large"):
+			return ErrRequestTooLarge
 		default:
 			return err
 		}
@@ -81,35 +88,37 @@ func decodeJSONBody(r *http.Request, dst interface{}, maxBytes int64) error {
 	return nil
 }
 
-// Public JSON decoder handles decoding the JSON body and sending back appropriate error responses on failure.
-// Usage:
-// if !utils.MustDecodeJSON(w, r, &body, 4<<10) { 	// 4KB max
-//
-//		return // error already written to response
-//	}
-func DecodeJSONHandler(w http.ResponseWriter, r *http.Request, dst interface{}, maxBytes int64) bool {
-	err := decodeJSONBody(r, dst, maxBytes)
+// DecodeJSONHandler attempts to decode the request body into dst and sends an appropriate error response on failure.
+// Returns true on success, false on failure (error already written to response).
+func DecodeJSONHandler(w http.ResponseWriter, r *http.Request, dst interface{}, maxBytes ...int64) bool {
+	size := defaultMaxJSONBytes
+	if len(maxBytes) > 0 {
+		size = maxBytes[0]
+	}
+	err := decodeJSONBody(w, r, dst, size)
 	if err == nil {
 		return true
 	}
 
+	// Map custom errors to HTTP status codes
 	var status int
 	switch err {
 	case ErrRequestTooLarge:
-		status = http.StatusRequestEntityTooLarge
+		status = http.StatusRequestEntityTooLarge // 413
 	case ErrMalformedJSON, ErrExtraData, ErrEmptyBody:
-		status = http.StatusBadRequest
+		status = http.StatusBadRequest // 400
 	default:
-		status = http.StatusBadRequest
+		status = http.StatusInternalServerError // unexpected error
 	}
 
-	// Log the error in both Zap and Sentry
+	// Log the error
 	ctx := r.Context()
 	LogWarn(ctx, "Failed to decode JSON request",
 		zap.String("error", err.Error()),
 	)
 	sentry.CaptureException(err)
 
+	// Send the error response
 	JSONError(w, status, err.Error())
 	return false
 }
