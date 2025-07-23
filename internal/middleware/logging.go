@@ -12,24 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type responseWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (rw *responseWriter) WriteHeader(status int) {
-	rw.status = status
-	rw.ResponseWriter.WriteHeader(status)
-}
-
-func (rw *responseWriter) Header() http.Header {
-	return rw.ResponseWriter.Header()
-}
-
-func (rw *responseWriter) Write(b []byte) (int, error) {
-	return rw.ResponseWriter.Write(b)
-}
-
 // Safe env accessor helper
 func safe[T any](v *T, get func(*T) string) string {
 	if v == nil {
@@ -66,9 +48,6 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				StartTime: start,
 			})
 
-			// Update the request with the logger and start time attached.
-			r = r.WithContext(ctx)
-
 			// Update Sentry scope pre-request so the tags are always set
 			sentry.ConfigureScope(func(scope *sentry.Scope) {
 				scope.SetTag("method", r.Method)
@@ -84,11 +63,13 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				scope.SetTag("user_role", safe(userCtx, func(u *models.UserContext) string { return u.Role }))
 			})
 
-			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+			// Update the request with the logger and start time
+			r = r.WithContext(ctx)
 
 			// Set panic loggers for Sentry and Zap.
 			defer func() {
 				duration := time.Since(start)
+				// Log the request to Sentry
 				if err := recover(); err != nil {
 					sentry.WithScope(func(scope *sentry.Scope) {
 						scope.SetTag("request_id", requestID)
@@ -106,17 +87,23 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 						zap.Duration("duration", duration),
 					)
 
-					utils.JSONError(rw, http.StatusInternalServerError, "Internal server error")
+					utils.JSONError(w, http.StatusInternalServerError, "Internal server error")
 					return
 				}
-
-				reqLogger.With(zap.Duration("duration", duration)).Info("Request Completed",
-					zap.Int("status", rw.status),
-				)
+				// Log the request completion with duration and HTTP status to Zap
+				if rw, ok := w.(*models.ResponseWriter); ok {
+					reqLogger.With(zap.Duration("duration", duration)).Info("Request Completed",
+						zap.Int("status", rw.Status),
+					)
+				} else {
+					reqLogger.With(zap.Duration("duration", duration)).Info("Request Completed",
+						zap.String("status", "unknown"), // fallback log
+					)
+				}
 			}()
 
-			reqLogger.Info("Starting Request")
-			next.ServeHTTP(rw, r)
+			reqLogger.Info("Processing Request")
+			next.ServeHTTP(w, r)
 		})
 	}
 }

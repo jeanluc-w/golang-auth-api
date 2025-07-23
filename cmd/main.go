@@ -26,6 +26,7 @@ func main() {
 	// Define API routes
 	router := httprouter.New()
 	router.GET(server.V1_HealthCheck, handlers.HealthCheckHandler)
+	router.POST(server.V1_StartEmailVerification, handlers.StartEmailVerificationHandler)
 
 	// Wrap with middlewares
 	handler := handlers.BuildHandlerStack(router, logger)

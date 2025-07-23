@@ -6,8 +6,5 @@ import (
 )
 
 func TimeoutMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.TimeoutHandler(next, config.Loaded.RequestTimeout, `{"error":"request timeout"}`)
-		next.ServeHTTP(w, r)
-	})
+	return http.TimeoutHandler(next, config.Loaded.RequestTimeout, `{"error":"request timeout"}`)
 }

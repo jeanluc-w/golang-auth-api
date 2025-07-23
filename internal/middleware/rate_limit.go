@@ -10,8 +10,6 @@ import (
 	"edibubble-api/internal/utils"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/ulule/limiter/v3"
-	redisstore "github.com/ulule/limiter/v3/drivers/store/redis"
 	"go.uber.org/zap"
 )
 
@@ -27,26 +25,23 @@ func extractRateKey(r *http.Request) string {
 }
 
 func RateLimitMiddleware(next http.Handler) http.Handler {
-	store, err := redisstore.NewStoreWithOptions(config.Loaded.RedisClient, limiter.StoreOptions{
-		Prefix:   "rl", // namespace prefix
-		MaxRetry: 1,
-	})
-	if err != nil {
-		panic(fmt.Sprintf("failed to create redis rate limiter store: %v", err))
-	}
-	limiterInstance := limiter.New(store, config.Loaded.RateLimit)
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		key := extractRateKey(r)
-		limitCtx, err := limiterInstance.Get(ctx, key)
+
+		limitCtx, err := config.Loaded.RateLimiter.Get(ctx, key)
 		if err != nil {
 			utils.LogError(ctx, "Could not get rate limiter in middleware", zap.Error(err))
-			utils.JSONError(w, http.StatusInternalServerError, "An unkown server error ocurred.")
+			utils.JSONError(w, http.StatusInternalServerError, "An unknown server error occurred.")
 			return
 		}
 
-		utils.LogDebug(ctx, "Rate limiting check", zap.String("rate_key", key))
+		utils.LogDebug(ctx, "Rate limiting check",
+			zap.String("rate_key", key),
+			zap.Int64("limit", limitCtx.Limit),
+			zap.Int64("remaining", limitCtx.Remaining),
+			zap.Int64("reset", limitCtx.Reset),
+		)
 
 		// Report when people are exceeding and return an error
 		if limitCtx.Reached {
@@ -60,8 +55,13 @@ func RateLimitMiddleware(next http.Handler) http.Handler {
 			})
 			sentry.CaptureMessage("Rate limit exceeded")
 
-			// Log locally and return an error
-			utils.LogWarn(ctx, "Rate limit exceeded", zap.String("rate_key", key))
+			// Log locally and return the JSON error to the client
+			utils.LogWarn(ctx, "Rate limit exceeded",
+				zap.String("rate_key", key),
+				zap.Int64("limit", limitCtx.Limit),
+				zap.Int64("remaining", limitCtx.Remaining),
+				zap.Int64("reset", limitCtx.Reset),
+			)
 			utils.JSONError(w, http.StatusTooManyRequests, "Rate limit exceeded")
 			return
 		}

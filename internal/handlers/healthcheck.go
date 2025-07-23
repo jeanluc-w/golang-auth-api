@@ -8,9 +8,10 @@ import (
 )
 
 func HealthCheckHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	utils.LogDebug(r.Context(), "Received Health Check request")
+	ctx := r.Context()
+	utils.LogDebug(ctx, "Processing HealthCheckHandler flow")
 	utils.JSONResponse(w, http.StatusOK, map[string]string{
 		"status": "ok",
 	})
-	utils.LogDebug(r.Context(), "Returned Health Check request")
+	utils.LogDebug(ctx, "Returned Health Check response")
 }

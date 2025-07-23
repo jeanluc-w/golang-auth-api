@@ -8,14 +8,16 @@ import (
 )
 
 func BuildHandlerStack(router http.Handler, logger *zap.Logger) http.Handler {
-	stack := middleware.JSONMiddleware(
-		middleware.ResponseHeadersMiddleware(
-			middleware.JWTMiddleware(
-				middleware.RequestIDMiddleware(
-					middleware.LoggerMiddleware(logger)(
+	stack := middleware.ResponseWriterMiddleware(
+		middleware.RequestIDMiddleware(
+			middleware.LoggerMiddleware(logger)(
+				middleware.JSONMiddleware(
+					middleware.ResponseHeadersMiddleware(
 						middleware.RateLimitMiddleware(
-							middleware.TimeoutMiddleware(
-								router,
+							middleware.JWTMiddleware(
+								middleware.TimeoutMiddleware(
+									router,
+								),
 							),
 						),
 					),

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"edibubble-api/config"
+	"edibubble-api/internal/models"
 	"encoding/json"
 	"errors"
 	"io"
@@ -25,8 +26,13 @@ const defaultMaxJSONBytes int64 = 8 << 10 // 8 KB
 
 // Handle any JSON response with proper headers and formatting.
 func JSONResponse(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+	// Convert the response writer to the custom type and set the status code
+	rw, ok := w.(*models.ResponseWriter)
+	if ok {
+		rw.Status = status
+	}
+	rw.Header().Set("Content-Type", "application/json")
+	rw.WriteHeader(status)
 
 	var output []byte
 	var err error
@@ -39,11 +45,11 @@ func JSONResponse(w http.ResponseWriter, status int, payload any) {
 
 	if err != nil {
 		// fallback to basic error response
-		http.Error(w, `{"error":"internal json encoding error"}`, http.StatusInternalServerError)
+		http.Error(rw, `{"error":"internal json encoding error"}`, http.StatusInternalServerError)
 		return
 	}
 
-	_, _ = w.Write(output)
+	_, _ = rw.Write(output)
 }
 
 // Simplified error response handler
