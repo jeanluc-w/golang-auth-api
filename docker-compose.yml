@@ -24,6 +24,22 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
 
+  migrate:
+    image: migrate/migrate
+    depends_on:
+      - postgres
+    networks:
+      - edibubble-net
+    volumes:
+      - ./db/migrations:/migrations
+    entrypoint:
+      [
+        "migrate",
+        "-path", "/migrations",
+        "-database", "postgres://admin:superlongsecretpassword@postgres:5432/edibubble?sslmode=disable",
+        "up"
+      ]
+
 volumes:
   pg_data:
 

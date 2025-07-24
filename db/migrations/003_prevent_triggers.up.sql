@@ -39,7 +39,7 @@ BEGIN
   IF NEW.type = 'totp' THEN
     IF EXISTS (
       SELECT 1 FROM mfa_factors
-      WHERE user_id = NEW.user_id AND type = 'totp' AND id != NEW.id
+      WHERE user_id = NEW.user_id AND type = 'totp' AND id IS DISTINCT FROM NEW.id LIMIT 1
     ) THEN
       RAISE EXCEPTION 'Only one TOTP MFA factor is allowed per user';
     END IF;

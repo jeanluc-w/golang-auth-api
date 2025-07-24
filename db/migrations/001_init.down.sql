@@ -1,4 +1,5 @@
 -- Drop indexes
+DROP INDEX IF EXISTS idx_logins_user_created;
 DROP INDEX IF EXISTS idx_logins_identity;
 DROP INDEX IF EXISTS idx_logins_user;
 DROP INDEX IF EXISTS idx_sessions_user_active;

@@ -18,18 +18,19 @@ CREATE TYPE user_origin AS ENUM (
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
-  username TEXT UNIQUE,
+  username TEXT UNIQUE NOT NULL,
   profile_photo_url TEXT,
   display_name TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   status user_status DEFAULT 'disabled',
   role user_role DEFAULT 'user',
-  email_verified BOOLEAN DEFAULT FALSE, -- True if email is verified
-  verified_at TIMESTAMPTZ, -- Null if not verified
   last_login TIMESTAMPTZ,
   last_password_change TIMESTAMPTZ, -- Null when only SSO is used
-  origin user_origin, -- Useful for analytics of sign-ups
+  origin user_origin, -- Useful for analytics of sign-ups, especially if multiple SSO providers are eventually used
   last_seen TIMESTAMPTZ, -- Last time the user was active in the app for live-time features
+  deleted_at TIMESTAMPTZ, -- Allow soft deletes
+
+  -- Ensure username is alphanumeric, can include dots and underscores, but not start/end with a dot/underscore
   CONSTRAINT username_format CHECK (username ~ '^[a-zA-Z0-9](?:[a-zA-Z0-9._]{0,28}[a-zA-Z0-9])?$')
 );
 
@@ -47,8 +48,9 @@ CREATE TABLE auth_identities (
   provider_user_id TEXT NOT NULL,
   password_hash TEXT, -- only for 'email' provider
   failed_attempts INTEGER DEFAULT 0,
+  last_failed_at TIMESTAMPTZ,
+  locked_at TIMESTAMPTZ,
   last_login TIMESTAMPTZ,
-  lockout_until TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   CHECK (
     (provider = 'email' AND password_hash IS NOT NULL)
@@ -74,7 +76,9 @@ CREATE TABLE mfa_factors (
   verified BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT now(),
   failed_attempts INTEGER DEFAULT 0,
-  last_used_at TIMESTAMPTZ
+  last_used_at TIMESTAMPTZ,
+  revoked BOOLEAN DEFAULT FALSE,
+  UNIQUE(user_id, type) -- Only one factor of each type per user
 );
 
 
@@ -103,7 +107,9 @@ CREATE TABLE sessions (
   created_at TIMESTAMPTZ DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL,
   refresh_token_hash TEXT, -- Hash of the refresh token for long-lived sessions
+  rotated_at TIMESTAMPTZ, -- Track when the token was last rotated
   revoked BOOLEAN DEFAULT FALSE,
+  revoked_at TIMESTAMPTZ,
   ip TEXT,
   user_agent TEXT,
   metadata JSONB
@@ -171,3 +177,4 @@ CREATE INDEX idx_mfa_factors_user ON mfa_factors(user_id);
 CREATE INDEX idx_sessions_user_active ON sessions(user_id) WHERE revoked = FALSE;
 CREATE INDEX idx_logins_user ON logins(user_id);
 CREATE INDEX idx_logins_identity ON logins(identity_id);
+CREATE INDEX idx_logins_user_created ON logins(user_id, created_at DESC);

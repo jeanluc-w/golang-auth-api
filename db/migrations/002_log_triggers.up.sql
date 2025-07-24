@@ -1,16 +1,17 @@
--- This trigger logs changes to the `auth_identities`table.
--- It captures changes to the `failed_attempts`, `lockout_until`, and `password_hash` fields.
+-- This trigger logs changes to the `auth_identities` table.
+-- It captures changes to the `failed_attempts`, `locked_at`, and `password_hash` fields.
 CREATE OR REPLACE FUNCTION log_auth_identity_update()
 RETURNS TRIGGER AS $$
 DECLARE
   changed JSONB := '{}';
+  user_rec RECORD;
 BEGIN
   IF NEW.failed_attempts IS DISTINCT FROM OLD.failed_attempts THEN
     changed := jsonb_set(changed, '{failed_attempts}', to_jsonb(ARRAY[OLD.failed_attempts, NEW.failed_attempts]));
   END IF;
 
-  IF NEW.lockout_until IS DISTINCT FROM OLD.lockout_until THEN
-    changed := jsonb_set(changed, '{lockout_until}', to_jsonb(ARRAY[OLD.lockout_until, NEW.lockout_until]));
+  IF NEW.locked_at IS DISTINCT FROM OLD.locked_at THEN
+    changed := jsonb_set(changed, '{locked_at}', to_jsonb(ARRAY[OLD.locked_at, NEW.locked_at]));
   END IF;
 
   IF NEW.password_hash IS DISTINCT FROM OLD.password_hash THEN
@@ -18,15 +19,21 @@ BEGIN
   END IF;
 
   IF changed != '{}' THEN
+    SELECT username, email INTO user_rec FROM users WHERE id = NEW.user_id;
+
     INSERT INTO audit_logs (
       actor_id,
       target_user_id,
+      target_username,
+      target_email,
       action,
       changes,
       created_at
     ) VALUES (
       current_setting('app.actor_id', true)::UUID,
       NEW.user_id,
+      user_rec.username,
+      user_rec.email,
       'password_reset',
       changed,
       now()
@@ -40,7 +47,11 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_auth_identity_update_audit
 AFTER UPDATE ON auth_identities
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
+WHEN (
+  OLD.failed_attempts IS DISTINCT FROM NEW.failed_attempts OR
+  OLD.locked_at IS DISTINCT FROM NEW.locked_at OR
+  OLD.password_hash IS DISTINCT FROM NEW.password_hash
+)
 EXECUTE FUNCTION log_auth_identity_update();
 
 
@@ -51,6 +62,7 @@ CREATE OR REPLACE FUNCTION log_mfa_factor_update()
 RETURNS TRIGGER AS $$
 DECLARE
   changed JSONB := '{}';
+  user_rec RECORD;
 BEGIN
   IF NEW.verified IS DISTINCT FROM OLD.verified THEN
     changed := jsonb_set(changed, '{verified}', to_jsonb(ARRAY[OLD.verified, NEW.verified]));
@@ -61,15 +73,21 @@ BEGIN
   END IF;
 
   IF changed != '{}' THEN
+    SELECT username, email INTO user_rec FROM users WHERE id = NEW.user_id;
+
     INSERT INTO audit_logs (
       actor_id,
       target_user_id,
+      target_username,
+      target_email,
       action,
       changes,
       created_at
     ) VALUES (
       current_setting('app.actor_id', true)::UUID,
       NEW.user_id,
+      user_rec.username,
+      user_rec.email,
       'mfa_change',
       changed,
       now()
@@ -83,7 +101,10 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_mfa_factor_update_audit
 AFTER UPDATE ON mfa_factors
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
+WHEN (
+  OLD.verified IS DISTINCT FROM NEW.verified OR
+  OLD.enabled IS DISTINCT FROM NEW.enabled
+)
 EXECUTE FUNCTION log_mfa_factor_update();
 
 
@@ -92,17 +113,25 @@ EXECUTE FUNCTION log_mfa_factor_update();
 -- It logs the user ID, action, and reason for the reset.
 CREATE OR REPLACE FUNCTION log_password_reset_used()
 RETURNS TRIGGER AS $$
+DECLARE
+  user_rec RECORD;
 BEGIN
   IF NEW.used_at IS NOT NULL AND OLD.used_at IS NULL THEN
+    SELECT username, email INTO user_rec FROM users WHERE id = NEW.user_id;
+
     INSERT INTO audit_logs (
       actor_id,
       target_user_id,
+      target_username,
+      target_email,
       action,
       reason,
       created_at
     ) VALUES (
       current_setting('app.actor_id', true)::UUID,
       NEW.user_id,
+      user_rec.username,
+      user_rec.email,
       'password_reset',
       'Password reset completed',
       now()
@@ -199,5 +228,9 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_user_update_audit
 AFTER UPDATE ON users
 FOR EACH ROW
-WHEN (OLD.* IS DISTINCT FROM NEW.*)
+WHEN WHEN (
+  OLD.email IS DISTINCT FROM NEW.email OR
+  OLD.status IS DISTINCT FROM NEW.status OR
+  OLD.role IS DISTINCT FROM NEW.role
+)
 EXECUTE FUNCTION log_user_update();
