@@ -7,22 +7,22 @@ import (
 	"github.com/resend/resend-go/v2"
 )
 
-func SendEmailVerificationEmail(code string, toEmail string) error {
+func SendEmailVerificationEmail(code string, toEmail string) (string, error) {
 	client := config.Loaded.ResendClient
 
 	htmlBody, err := RenderVerificationHTML(code)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	emailFormat := &resend.SendEmailRequest{
 		To:      []string{toEmail},
-		From:    "Edibubble <no-reply@edibubble.com>",
+		From:    "Edibubble <no-reply@mail.edibubble.com>",
 		Subject: "Verification Code",
 		Text:    fmt.Sprintf("Your Edibubble verification code is: %s", code),
 		Html:    htmlBody,
 	}
 
-	_, err = client.Emails.Send(emailFormat)
-	return err
+	sent, err := client.Emails.Send(emailFormat)
+	return sent.Id, err
 }

@@ -23,16 +23,19 @@ func InitLogger(env string) *zap.Logger {
 
 	// Choose encoder
 	var encoder zapcore.Encoder
+	var logLevel zapcore.Level
 	if env == "development" {
 		encoder = zapcore.NewConsoleEncoder(encoderCfg)
+		logLevel = zapcore.DebugLevel
 	} else {
 		encoder = zapcore.NewJSONEncoder(encoderCfg)
+		logLevel = zapcore.InfoLevel
 	}
 
 	core := zapcore.NewCore(
 		encoder,
 		zapcore.AddSync(os.Stdout),
-		zap.NewAtomicLevelAt(zapcore.InfoLevel),
+		zap.NewAtomicLevelAt(logLevel),
 	)
 
 	logger := zap.New(core)

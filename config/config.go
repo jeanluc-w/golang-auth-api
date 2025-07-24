@@ -2,9 +2,11 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,6 +41,7 @@ func Load() *Config {
 	sentry_rate := parseFloatConfig("SENTRY_SAMPLE_RATE", "1")
 	timeout := parseIntConfig("REQUEST_TIMEOUT_SECONDS", "10")
 	limit := parseIntConfig("REQUEST_RATE_LIMIT", "10")
+	env := getStringConfig("ENV", "development")
 
 	// Establish and ping the Redis Client
 	redisClient := redis.NewClient(&redis.Options{
@@ -74,9 +77,19 @@ func Load() *Config {
 	}
 	limiterInstance := limiter.New(store, ratelimit)
 
+	// Establish Resend Client
+	resendApiKey := requireStringConfig("RESEND_API_KEY")
+	resendClient := resend.NewClient(resendApiKey)
+	// Validate Resend API Key by sending a dummy email (only for development)
+	if env == "production" {
+		if err := validateResendAPIKey(resendClient); err != nil {
+			log.Fatalf("Resend connection validation failed: %v", err)
+		}
+	}
+
 	// Return the completed configuration if successful with everything
 	Loaded = &Config{
-		Env:                getStringConfig("ENV", "development"),
+		Env:                env,
 		Port:               getStringConfig("PORT", "8080"),
 		PGPool:             pgPool,
 		SentryDSN:          requireStringConfig("SENTRY_DSN"),
@@ -86,8 +99,8 @@ func Load() *Config {
 		RequestTimeout:     time.Duration(timeout * int64(time.Second)),
 		RateLimiter:        limiterInstance,
 		JWTSecret:          requireStringConfig("JWT_SECRET"),
-		ResendClient:       resend.NewClient(requireStringConfig("RESEND_API_KEY")),
-		OTP_TTL:            10 * time.Minute,
+		ResendClient:       resendClient,
+		OTP_TTL:            15 * time.Minute,
 	}
 	return nil
 }
@@ -123,4 +136,23 @@ func requireStringConfig(key string) string {
 		log.Fatalf("Missing env var: %s", key)
 	}
 	return v
+}
+
+func validateResendAPIKey(client *resend.Client) error {
+	dummy := &resend.SendEmailRequest{
+		To:      []string{"no-reply@mail.edibubble.com"},
+		From:    "Edibubble <no-reply@mail.edibubble.com>",
+		Subject: "Test",
+		Text:    "This is a test.",
+	}
+
+	_, err := client.Emails.Send(dummy)
+	if err != nil {
+		if strings.Contains(err.Error(), "email address is invalid") {
+			// Means the request hit the API and failed for a good reason
+			return nil
+		}
+		return fmt.Errorf("resend validation error: %w", err)
+	}
+	return nil
 }

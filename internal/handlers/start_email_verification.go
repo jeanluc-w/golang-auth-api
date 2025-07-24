@@ -28,6 +28,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 	// Validate that the email isn't already registered
 	emailParsed := strings.ToLower(strings.TrimSpace(payload.Email))
 	if !utils.IsValidEmail(emailParsed) {
+		utils.LogDebug(ctx, "Invalid email format", zap.String("email", emailParsed))
 		utils.JSONError(w, http.StatusBadRequest, "Invalid email format")
 		return
 	}
@@ -39,8 +40,8 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 		now := time.Now()
 
 		// Check if it's too early to regenerate another code
-		if now.Before(meta.ExpiresAt) && now.Add(regenerateWindow).Before(meta.ExpiresAt) && meta.Attempts < meta.MaxAttempts {
-			utils.JSONError(w, http.StatusTooManyRequests, "Verification already requested")
+		if now.Sub(meta.CreatedAt) < regenerateWindow {
+			utils.JSONError(w, http.StatusTooManyRequests, "Please wait before requesting a new code")
 			return
 		}
 	}
@@ -48,9 +49,11 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 	// Create a unique code and store it in Redis
 	utils.LogInfo(ctx, "Generating verification code for email", zap.String("email", emailParsed))
 	code := utils.GenerateCode()
+	currentTime := time.Now()
 	otpMeta := models.OTPMeta{
 		Code:        code,
-		ExpiresAt:   time.Now().Add(config.Loaded.OTP_TTL * time.Minute),
+		CreatedAt:   currentTime,
+		ExpiresAt:   currentTime.Add(config.Loaded.OTP_TTL * time.Minute),
 		Attempts:    0,
 		MaxAttempts: 5,
 	}
@@ -65,12 +68,14 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 
 	// Send the email with the code through Resend.
 	utils.LogInfo(ctx, "Saved code to Redis, sending verification email", zap.String("email", emailParsed))
-	if err := email.SendEmailVerificationEmail(code, emailParsed); err != nil {
-		utils.LogError(ctx, "Failed to send verification email")
+	id, err := email.SendEmailVerificationEmail(code, emailParsed)
+	if err != nil {
+		utils.LogError(ctx, "Failed to send verification email", zap.Error(err))
 		utils.JSONError(w, http.StatusInternalServerError, "Failed to send verification email")
 		return
 	}
 
 	// Respond with success
+	utils.LogInfo(ctx, "Verification email sent successfully", zap.String("email", emailParsed), zap.String("email_id", id))
 	utils.JSONResponse(w, http.StatusOK, map[string]string{"message": "Verification code sent"})
 }

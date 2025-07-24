@@ -26,10 +26,12 @@ const defaultMaxJSONBytes int64 = 8 << 10 // 8 KB
 
 // Handle any JSON response with proper headers and formatting.
 func JSONResponse(w http.ResponseWriter, status int, payload any) {
-	// Convert the response writer to the custom type and set the status code
-	rw, ok := w.(*models.ResponseWriter)
-	if ok {
-		rw.Status = status
+	// Attempt to use the custom ResponseWriter if available
+	rw := w
+	// If it's our custom wrapper, set the status and the writer to that
+	if mw, ok := w.(*models.ResponseWriter); ok {
+		mw.Status = status
+		rw = mw
 	}
 	rw.Header().Set("Content-Type", "application/json")
 	rw.WriteHeader(status)
