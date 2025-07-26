@@ -41,6 +41,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 
 		// Check if it's too early to regenerate another code
 		if now.Sub(meta.CreatedAt) < regenerateWindow {
+			utils.LogDebug(ctx, "Too early to regenerate code", zap.String("email", emailParsed), zap.Duration("wait_time", regenerateWindow-now.Sub(meta.CreatedAt)))
 			utils.JSONError(w, http.StatusTooManyRequests, "Please wait before requesting a new code")
 			return
 		}
