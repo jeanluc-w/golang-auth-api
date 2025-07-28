@@ -87,7 +87,7 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 						zap.Duration("duration", duration),
 					)
 
-					utils.JSONError(w, http.StatusInternalServerError, "Internal server error")
+					utils.JSONError(w, http.StatusInternalServerError, utils.Errors.InternalServerError)
 					return
 				}
 				// Log the request completion with duration and HTTP status to Zap
@@ -96,8 +96,9 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 						zap.Int("status", rw.Status),
 					)
 				} else {
+					// Fallback log if something went wrong with custom ResponseWriter
 					reqLogger.With(zap.Duration("duration", duration)).Info("Request Completed",
-						zap.String("status", "unknown"), // fallback log
+						zap.String("status", "unknown"),
 					)
 				}
 			}()

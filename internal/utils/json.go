@@ -54,14 +54,27 @@ func JSONResponse(w http.ResponseWriter, status int, payload any) {
 	_, _ = rw.Write(output)
 }
 
-// Simplified error response handler
-func JSONError(w http.ResponseWriter, status int, message string) {
-	JSONResponse(w, status, map[string]string{
-		"error": message,
+// Writes a structured JSON error response.
+func JSONError(w http.ResponseWriter, status int, detail ErrorDetail) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   string(detail.Code),
+		"message": detail.Message,
 	})
 }
 
-// decodeJSONBody decodes JSON from request with a max size limit.
+// Writes a structured JSON error response with an override message.
+func JSONErrorWithMessage(w http.ResponseWriter, status int, detail ErrorDetail, override string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   string(detail.Code),
+		"message": override,
+	})
+}
+
+// Decodes JSON from request with a max size limit.
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}, maxBytes int64) error {
 	// Limit the size of the request body
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
@@ -96,7 +109,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}, max
 	return nil
 }
 
-// DecodeJSONHandler attempts to decode the request body into dst and sends an appropriate error response on failure.
+// Attempts to decode the request body into dst and sends an appropriate error response on failure.
 // Returns true on success, false on failure (error already written to response).
 func DecodeJSONHandler(w http.ResponseWriter, r *http.Request, dst interface{}, maxBytes ...int64) bool {
 	size := defaultMaxJSONBytes
@@ -121,12 +134,10 @@ func DecodeJSONHandler(w http.ResponseWriter, r *http.Request, dst interface{}, 
 
 	// Log the error
 	ctx := r.Context()
-	LogWarn(ctx, "Failed to decode JSON request",
-		zap.String("error", err.Error()),
-	)
+	LogWarn(ctx, "Failed to decode JSON request", zap.Error(err))
 	sentry.CaptureException(err)
 
 	// Send the error response
-	JSONError(w, status, err.Error())
+	JSONError(w, status, Errors.InvalidPayload)
 	return false
 }

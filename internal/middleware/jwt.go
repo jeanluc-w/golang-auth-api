@@ -37,7 +37,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 		// Verify the JWT token and get back the user object if successful
 		user, err := auth.VerifyJWT(r.Header.Get("Authorization"))
 		if err != nil {
-			utils.JSONError(w, http.StatusUnauthorized, err.Error())
+			utils.JSONError(w, http.StatusUnauthorized, utils.Errors.Unauthorized)
 			return
 		}
 

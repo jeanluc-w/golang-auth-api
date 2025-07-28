@@ -12,7 +12,7 @@ func JSONMiddleware(next http.Handler) http.Handler {
 		switch r.Method {
 		case http.MethodPost, http.MethodPut, http.MethodPatch:
 			if contentType := r.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
-				utils.JSONError(w, http.StatusUnsupportedMediaType, "Expected Content-Type application/json")
+				utils.JSONErrorWithMessage(w, http.StatusUnsupportedMediaType, utils.Errors.InvalidPayload, "Expected Content-Type application/json")
 				return
 			}
 		}

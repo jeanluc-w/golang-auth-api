@@ -10,6 +10,7 @@ import (
 	"edibubble-api/config"
 	"edibubble-api/internal/handlers"
 	"edibubble-api/internal/server"
+	"edibubble-api/internal/utils"
 )
 
 func main() {
@@ -27,6 +28,15 @@ func main() {
 	router := httprouter.New()
 	router.GET(server.V1_HealthCheck, handlers.HealthCheckHandler)
 	router.POST(server.V1_StartEmailVerification, handlers.StartEmailVerificationHandler)
+	router.POST(server.V1_VerifyEmail, handlers.VerifyEmailCodeHandler)
+
+	// Handle httprouters default NotFound and MethodNotAllowed
+	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		utils.JSONError(w, http.StatusNotFound, utils.Errors.RouteNotFound)
+	})
+	router.MethodNotAllowed = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		utils.JSONError(w, http.StatusMethodNotAllowed, utils.Errors.RouteNotFound)
+	})
 
 	// Wrap with middlewares
 	handler := handlers.BuildHandlerStack(router, logger)
