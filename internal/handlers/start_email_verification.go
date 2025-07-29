@@ -25,7 +25,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 		return
 	}
 
-	// Validate that the email isn't already registered
+	// Validate that the email is valid
 	emailParsed := strings.ToLower(strings.TrimSpace(payload.Email))
 	if !utils.IsValidEmail(emailParsed) {
 		utils.LogDebug(ctx, "Invalid email format", zap.String("email", emailParsed))
@@ -33,8 +33,10 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 		return
 	}
 
+	// TODO: Add validation that the user doesn't already exist in the DB
+
 	// Check if the email was generated recently
-	const regenerateWindow = 5 * time.Minute
+	const regenerateWindow = 1 * time.Minute
 	meta, err := utils.GetVerificationCode(ctx, config.Loaded.RedisClient, emailParsed)
 	if err == nil && meta != nil {
 		now := time.Now()
@@ -54,7 +56,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 	otpMeta := models.OTPMeta{
 		Code:        code,
 		CreatedAt:   currentTime,
-		ExpiresAt:   currentTime.Add(config.Loaded.OTP_TTL * time.Minute),
+		ExpiresAt:   currentTime.Add(config.Loaded.OTP_TTL),
 		Attempts:    0,
 		MaxAttempts: 5,
 	}

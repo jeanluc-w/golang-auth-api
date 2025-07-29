@@ -65,7 +65,7 @@ func Load() *Config {
 
 	// Establish rate limiter
 	ratelimit := limiter.Rate{
-		Period: time.Minute,
+		Period: time.Second,
 		Limit:  limit,
 	}
 	store, err := redisstore.NewStoreWithOptions(redisClient, limiter.StoreOptions{
@@ -100,7 +100,7 @@ func Load() *Config {
 		RateLimiter:        limiterInstance,
 		JWTSecret:          requireStringConfig("JWT_SECRET"),
 		ResendClient:       resendClient,
-		OTP_TTL:            15 * time.Minute,
+		OTP_TTL:            10 * time.Minute,
 	}
 	return nil
 }
