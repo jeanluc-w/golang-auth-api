@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"edibubble-api/config"
+	"edibubble-api/internal/auth"
 	"edibubble-api/internal/email"
 	"edibubble-api/internal/models"
 	"edibubble-api/internal/utils"
@@ -35,9 +36,9 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 
 	// TODO: Add validation that the user doesn't already exist in the DB
 
-	// Check if the email was generated recently
+	// Check if the email was generated recently (within the past minute)
 	const regenerateWindow = 1 * time.Minute
-	meta, err := utils.GetVerificationCode(ctx, config.Loaded.RedisClient, emailParsed)
+	meta, err := auth.GetVerificationCode(ctx, config.Loaded.RedisClient, emailParsed)
 	if err == nil && meta != nil {
 		now := time.Now()
 
@@ -63,7 +64,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 
 	// Save the code to Redis DB
 	utils.LogInfo(ctx, "Generated verification code, saving to Redis")
-	if err := utils.SaveVerificationCode(ctx, config.Loaded.RedisClient, emailParsed, otpMeta); err != nil {
+	if err := auth.SaveVerificationCode(ctx, config.Loaded.RedisClient, emailParsed, otpMeta); err != nil {
 		utils.LogError(ctx, "Failed to save verification code", zap.Error(err))
 		utils.JSONError(w, http.StatusInternalServerError, utils.Errors.InternalServerError)
 		return

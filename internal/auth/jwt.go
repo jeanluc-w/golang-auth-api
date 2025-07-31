@@ -3,7 +3,6 @@ package auth
 import (
 	"edibubble-api/config"
 	"edibubble-api/internal/models"
-	"edibubble-api/internal/utils"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,6 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// TODO: Change signing algorithms
+
 // Generate a signed JWT token with our custom claims
 func GenerateJWT(sessionID, userID, username, email, role string, ttl time.Duration) (string, error) {
 	secret := config.Loaded.JWTSecret
@@ -20,7 +21,9 @@ func GenerateJWT(sessionID, userID, username, email, role string, ttl time.Durat
 		return "", errors.New("JWT secret not configured")
 	}
 
-	exp := time.Now().Add(ttl)
+	// Generate the Token
+	now := time.Now()
+	exp := now.Add(ttl)
 	claims := models.JWTClaims{
 		SessionID: sessionID,
 		UserID:    userID,
@@ -31,17 +34,18 @@ func GenerateJWT(sessionID, userID, username, email, role string, ttl time.Durat
 			Issuer:    "edibubble-api",
 			Audience:  jwt.ClaimStrings{"edibubble-app"},
 			ID:        uuid.NewString(),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now().Add(-5 * time.Second)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now.Add(-5 * time.Second)),
 		},
 	}
 
 	// Create the session in Redis
-	if err := utils.GenerateSession(sessionID, exp, config.Loaded.RedisClient); err != nil {
+	if err := GenerateTemporarySession(sessionID, exp, config.Loaded.RedisClient); err != nil {
 		return "", fmt.Errorf("failed to create session in redis: %w", err)
 	}
 
+	// Sign and return the JWT
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }
@@ -53,19 +57,29 @@ func GenerateTemporaryJWT(email string, ttl time.Duration) (string, error) {
 		return "", errors.New("JWT secret not configured")
 	}
 
+	// Generate the token
+	sessionID := uuid.NewString()
+	now := time.Now()
+	exp := now.Add(ttl)
 	claims := models.JWTClaims{
 		Role: "joiner",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   email,
 			Issuer:    "edibubble-api",
 			Audience:  jwt.ClaimStrings{"edibubble-app"},
-			ID:        uuid.NewString(),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now().Add(-5 * time.Second)),
+			ID:        sessionID,
+			ExpiresAt: jwt.NewNumericDate(exp),
+			IssuedAt:  jwt.NewNumericDate(now),
+			NotBefore: jwt.NewNumericDate(now.Add(-5 * time.Second)),
 		},
 	}
 
+	// Create session in redis
+	if err := GenerateTemporarySession(sessionID, exp, config.Loaded.RedisClient); err != nil {
+		return "", fmt.Errorf("failed to create session in redis: %w", err)
+	}
+
+	// Sign and return the JWT
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }
@@ -137,7 +151,7 @@ func VerifyJWT(authHeader string) (*models.UserContext, error) {
 	}
 
 	// Check Redis-backed session validity
-	if !utils.IsValidSession(claims.SessionID, claims.ExpiresAt.Time, config.Loaded.RedisClient) {
+	if !IsValidSession(claims.SessionID, claims.ExpiresAt.Time, config.Loaded.RedisClient) {
 		return nil, errors.New("session expired or invalid")
 	}
 
@@ -160,6 +174,11 @@ func VerifyTemporaryJWT(authHeader string) (email string, err error) {
 	// Check if the claims are valid
 	if claims.Subject == "" || claims.Role != "joiner" {
 		return "", errors.New("invalid claims")
+	}
+
+	// Check if the session is valid (i.e. in the Redis)
+	if !IsValidTemporarySession(claims.ID, claims.ExpiresAt.Time, config.Loaded.RedisClient) {
+		return "", errors.New("session is expired or invalid")
 	}
 
 	// Return the email from the Subject claim

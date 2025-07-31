@@ -42,7 +42,7 @@ func VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter
 	}
 
 	// Get the record from Redis
-	meta, err := utils.GetVerificationCode(ctx, config.Loaded.RedisClient, emailParsed)
+	meta, err := auth.GetVerificationCode(ctx, config.Loaded.RedisClient, emailParsed)
 	if err != nil {
 		utils.LogDebug(ctx, "Failed getting data from Redis", zap.Error(err))
 		utils.JSONError(w, http.StatusUnauthorized, utils.Errors.IncorrectCode)
@@ -67,7 +67,7 @@ func VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter
 	if strings.TrimSpace(payload.Code) != meta.Code {
 		// Wrong code, increment failed attempts, store back in Redis, and return error
 		meta.Attempts++
-		err = utils.SaveVerificationCode(ctx, config.Loaded.RedisClient, emailParsed, *meta)
+		err = auth.SaveVerificationCode(ctx, config.Loaded.RedisClient, emailParsed, *meta)
 		if err != nil {
 			utils.LogWarn(ctx, "Failed to update failed attempt in Redis", zap.Error(err))
 		}
@@ -78,7 +78,7 @@ func VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter
 
 	// Attempt to generate a JWT for the user, return server error if it fails
 	utils.LogInfo(ctx, "Email verification successful", zap.String("email", emailParsed))
-	token, err := auth.GenerateTemporaryJWT(emailParsed, 15*time.Minute)
+	token, err := auth.GenerateTemporaryJWT(emailParsed, 30*time.Minute)
 	if err != nil {
 		utils.LogError(ctx, "Failed to generate temporary JWT", zap.Error(err))
 		utils.JSONError(w, http.StatusInternalServerError, utils.Errors.InternalServerError)

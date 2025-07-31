@@ -8,16 +8,21 @@ import (
 	"edibubble-api/internal/utils"
 	"net/http"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
-var openRoutePrefixes = []string{
-	server.V1_HealthCheck,
-	server.V1_StartEmailVerification,
-	server.V1_VerifyEmail,
+func isOpenRoute(path string) bool {
+	for _, prefix := range server.OpenRoutes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
-func isOpenRoute(path string) bool {
-	for _, prefix := range openRoutePrefixes {
+func isTemporaryJWTRoute(path string) bool {
+	for _, prefix := range server.TemporaryJWTRoutes {
 		if strings.HasPrefix(path, prefix) {
 			return true
 		}
@@ -33,10 +38,25 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		authHeader := r.Header.Get("Authorization")
 		ctx := r.Context()
+
+		// Verify the Temporary JWT IF it's the routes we allow them.
+		if isTemporaryJWTRoute(r.URL.Path) {
+			email, err := auth.VerifyTemporaryJWT(authHeader)
+			if err != nil {
+				utils.LogDebug(ctx, "Temporary JWT validation failed", zap.Error(err))
+				utils.JSONError(w, http.StatusUnauthorized, utils.Errors.Unauthorized)
+				return
+			}
+			ctx = context.WithValue(ctx, models.EmailFromDecodedTempJWTKey, email)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}
+
 		// Verify the JWT token and get back the user object if successful
-		user, err := auth.VerifyJWT(r.Header.Get("Authorization"))
+		user, err := auth.VerifyJWT(authHeader)
 		if err != nil {
+			utils.LogDebug(ctx, "JWT validation failed", zap.Error(err))
 			utils.JSONError(w, http.StatusUnauthorized, utils.Errors.Unauthorized)
 			return
 		}

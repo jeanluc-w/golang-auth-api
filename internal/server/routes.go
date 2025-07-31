@@ -7,9 +7,20 @@ const (
 	V1_Logout                 string = "/auth/v1/logout"
 	V1_StartEmailVerification string = "/auth/v1/start-email-verification"
 	V1_VerifyEmail            string = "/auth/v1/verify-email"
-	V1_CompleteJoin           string = "/auth/v1/complete-join"
+	V1_CompleteEmailJoin      string = "/auth/v1/complete-join/email"
+	// Forgot password
+	// Change Password
+	// SSO
 )
 
-// Forgot password
-// Change Password
-// SSO?
+// Routes where JWT validation isn't needed
+var OpenRoutes = []string{
+	V1_HealthCheck,
+	V1_StartEmailVerification,
+	V1_VerifyEmail,
+}
+
+// Routes where only Temporary JWTs are allowed (essentially sign-ups)
+var TemporaryJWTRoutes = []string{
+	V1_CompleteEmailJoin,
+}
