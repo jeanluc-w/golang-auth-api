@@ -47,7 +47,7 @@ func JSONResponse(w http.ResponseWriter, status int, payload any) {
 
 	if err != nil {
 		// fallback to basic error response
-		http.Error(rw, `{"error":"internal json encoding error"}`, http.StatusInternalServerError)
+		http.Error(rw, `{"error":"internal server error"}`, http.StatusInternalServerError)
 		return
 	}
 
