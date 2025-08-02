@@ -20,26 +20,19 @@ var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9._]{0,28}[a-zA-
 
 // Verification code regex verifies that the code matches:
 // - Is exactly 6 digits long
-var verificationCode = regexp.MustCompile(`^\d{6}$`)
+var verificationCodeRegex = regexp.MustCompile(`^\d{6}$`)
 
-// IsValidEmail checks that the email matches the regex pattern
 func IsValidEmail(email string) bool {
 	return emailRegex.MatchString(email)
 }
-
-// IsValidUsername checks that the username matches the regex pattern
 func IsValidUsername(username string) bool {
 	return usernameRegex.MatchString(username)
 }
-
-// IsValidPassword checks that the password is at least 12 characters long
 func IsValidPassword(password string) bool {
 	return len(password) >= 12
 }
-
-// IsValidVerificationCode checks that the verification code is a 6-digit numeric string
 func IsValidVerificationCode(code string) bool {
-	return verificationCode.MatchString(code)
+	return verificationCodeRegex.MatchString(code)
 }
 
 // IsOriginAllowed checks if the given origin is in the provided whitelist

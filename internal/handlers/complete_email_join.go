@@ -31,6 +31,20 @@ func CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate the payload
+	// Check that username is valid
+	if !utils.IsValidUsername(payload.Username) {
+		utils.LogInfo(ctx, "Username failed validation")
+		utils.JSONError(w, http.StatusBadRequest, utils.Errors.InvalidUsernameFormat)
+		return
+	}
+
+	// Check username doesn't exist in DB
+	if db.IsUsernameTaken(payload.Username) {
+		utils.LogInfo(ctx, "Username is already taken")
+		utils.JSONError(w, http.StatusConflict, utils.Errors.UsernameTaken)
+		return
+	}
+
+	// Check that the password is valid
 
 }

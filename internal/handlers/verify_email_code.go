@@ -35,7 +35,7 @@ func VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter
 	}
 
 	// Validate the verification code
-	if !utils.IsValidVerificationCode(payload.Code) {
+	if !utils.IsValidVerificationCode(strings.TrimSpace(payload.Code)) {
 		utils.LogDebug(ctx, "Invalid code")
 		utils.JSONError(w, http.StatusBadRequest, utils.Errors.IncorrectCode)
 		return
