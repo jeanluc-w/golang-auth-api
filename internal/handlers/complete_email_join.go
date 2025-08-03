@@ -1,7 +1,8 @@
 package handlers
 
 import (
-	"edibubble-api/internal/models"
+	"edibubble-api/internal/db/postgres"
+	"edibubble-api/internal/entities"
 	"edibubble-api/internal/utils"
 	"net/http"
 
@@ -12,7 +13,7 @@ func CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Starting CompleteEmailJoinHandler")
 
-	email := utils.GetContextString(r, models.EmailFromDecodedTempJWTKey, "")
+	email := utils.GetContextString(r, entities.EmailFromDecodedTempJWTKey, "")
 
 	// Validate the email again just to make sure it's allowed in case of weird
 	// JWT exploits ocurred
@@ -39,7 +40,7 @@ func CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check username doesn't exist in DB
-	if db.IsUsernameTaken(payload.Username) {
+	if postgres.IsUsernameTaken(payload.Username) {
 		utils.LogInfo(ctx, "Username is already taken")
 		utils.JSONError(w, http.StatusConflict, utils.Errors.UsernameTaken)
 		return

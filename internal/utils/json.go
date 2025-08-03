@@ -2,7 +2,7 @@ package utils
 
 import (
 	"edibubble-api/config"
-	"edibubble-api/internal/models"
+	"edibubble-api/internal/entities"
 	"encoding/json"
 	"errors"
 	"io"
@@ -29,7 +29,7 @@ func JSONResponse(w http.ResponseWriter, status int, payload any) {
 	// Attempt to use the custom ResponseWriter if available
 	rw := w
 	// If it's our custom wrapper, set the status and the writer to that
-	if mw, ok := w.(*models.ResponseWriter); ok {
+	if mw, ok := w.(*entities.ResponseWriter); ok {
 		mw.Status = status
 		rw = mw
 	}

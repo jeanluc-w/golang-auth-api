@@ -2,7 +2,7 @@ package auth
 
 import (
 	"edibubble-api/config"
-	"edibubble-api/internal/models"
+	"edibubble-api/internal/entities"
 	"errors"
 	"fmt"
 	"strings"
@@ -24,7 +24,7 @@ func GenerateJWT(sessionID, userID, username, email, role string, ttl time.Durat
 	// Generate the Token
 	now := time.Now()
 	exp := now.Add(ttl)
-	claims := models.JWTClaims{
+	claims := entities.JWTClaims{
 		SessionID: sessionID,
 		UserID:    userID,
 		Username:  username,
@@ -61,7 +61,7 @@ func GenerateTemporaryJWT(email string, ttl time.Duration) (string, error) {
 	sessionID := uuid.NewString()
 	now := time.Now()
 	exp := now.Add(ttl)
-	claims := models.JWTClaims{
+	claims := entities.JWTClaims{
 		Role: "joiner",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   email,
@@ -86,7 +86,7 @@ func GenerateTemporaryJWT(email string, ttl time.Duration) (string, error) {
 
 // Parse the JWT token from the Authorization header
 // Returns the JWTClaims if successful, or an error if parsing fails
-func parseJWT(authHeader string) (*models.JWTClaims, error) {
+func parseJWT(authHeader string) (*entities.JWTClaims, error) {
 	// Check if the Authorization header is present and formatted correctly
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return nil, errors.New("missing or malformed Authorization header")
@@ -94,7 +94,7 @@ func parseJWT(authHeader string) (*models.JWTClaims, error) {
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
 	// Parse the token with our custom claims
-	token, err := jwt.ParseWithClaims(tokenStr, &models.JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &entities.JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
@@ -107,7 +107,7 @@ func parseJWT(authHeader string) (*models.JWTClaims, error) {
 	}
 
 	// Extract the claims from the token
-	claims, ok := token.Claims.(*models.JWTClaims)
+	claims, ok := token.Claims.(*entities.JWTClaims)
 	if !ok {
 		return nil, errors.New("invalid claims")
 	}
@@ -138,7 +138,7 @@ func parseJWT(authHeader string) (*models.JWTClaims, error) {
 }
 
 // Verify the JWT token and return the User data structure when succesful
-func VerifyJWT(authHeader string) (*models.UserContext, error) {
+func VerifyJWT(authHeader string) (*entities.UserContext, error) {
 	// Extract the claims from the token
 	claims, err := parseJWT(authHeader)
 	if err != nil {
@@ -155,7 +155,7 @@ func VerifyJWT(authHeader string) (*models.UserContext, error) {
 		return nil, errors.New("session expired or invalid")
 	}
 
-	user := &models.UserContext{
+	user := &entities.UserContext{
 		ID:        claims.UserID,
 		Username:  claims.Username,
 		Role:      claims.Role,

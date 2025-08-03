@@ -1,4 +1,4 @@
-package models
+package entities
 
 type UserContext struct {
 	ID        string

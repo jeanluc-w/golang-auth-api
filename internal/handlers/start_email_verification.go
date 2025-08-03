@@ -4,7 +4,7 @@ import (
 	"edibubble-api/config"
 	"edibubble-api/internal/auth"
 	"edibubble-api/internal/email"
-	"edibubble-api/internal/models"
+	"edibubble-api/internal/entities"
 	"edibubble-api/internal/utils"
 	"net/http"
 	"strings"
@@ -54,7 +54,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 	utils.LogInfo(ctx, "Generating verification code for email", zap.String("email", emailParsed))
 	code := utils.GenerateCode()
 	currentTime := time.Now()
-	otpMeta := models.OTPMeta{
+	otpMeta := entities.OTPMeta{
 		Code:        code,
 		CreatedAt:   currentTime,
 		ExpiresAt:   currentTime.Add(config.Loaded.OTP_TTL),

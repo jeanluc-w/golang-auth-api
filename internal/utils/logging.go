@@ -2,7 +2,7 @@ package utils
 
 import (
 	"context"
-	"edibubble-api/internal/models"
+	"edibubble-api/internal/entities"
 	"fmt"
 	"net/http"
 	"time"
@@ -24,7 +24,7 @@ func (l *DynamicLogger) withDuration() *zap.Logger {
 // Retrieves the request-scoped logger from the context.
 // Returns a no-op logger if not found, to prevent panics.
 func getLogger(ctx context.Context) *zap.Logger {
-	if dynamic, ok := ctx.Value(models.LoggerContextKey).(*DynamicLogger); ok {
+	if dynamic, ok := ctx.Value(entities.LoggerContextKey).(*DynamicLogger); ok {
 		return dynamic.withDuration()
 	}
 	return zap.NewNop()
@@ -33,7 +33,7 @@ func getLogger(ctx context.Context) *zap.Logger {
 // Attaches the duration of the request and then sends a log to Sentry
 // with the passed error.
 func SendSentryLog(r *http.Request, err error) {
-	startTime := GetContextTime(r, models.StartTimeContextKey)
+	startTime := GetContextTime(r, entities.StartTimeContextKey)
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		if !startTime.IsZero() {
 			scope.SetTag("duration_ms", fmt.Sprintf("%d", time.Since(startTime).Milliseconds()))

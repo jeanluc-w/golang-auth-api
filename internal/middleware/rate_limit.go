@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"edibubble-api/config"
-	"edibubble-api/internal/models"
+	"edibubble-api/internal/entities"
 	"edibubble-api/internal/utils"
 
 	"github.com/getsentry/sentry-go"
@@ -15,7 +15,7 @@ import (
 
 // Extract user ID from JWT claims stored in context (if set by prior middleware)
 func extractRateKey(r *http.Request) string {
-	user, _ := r.Context().Value(models.UserContextKey).(*models.UserContext)
+	user, _ := r.Context().Value(entities.UserContextKey).(*entities.UserContext)
 	if user != nil && user.ID != "" {
 		return fmt.Sprintf("user:%s", user.ID)
 	}

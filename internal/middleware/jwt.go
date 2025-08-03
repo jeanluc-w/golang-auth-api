@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 	"edibubble-api/internal/auth"
-	"edibubble-api/internal/models"
+	"edibubble-api/internal/entities"
 	"edibubble-api/internal/server"
 	"edibubble-api/internal/utils"
 	"net/http"
@@ -49,7 +49,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 				utils.JSONError(w, http.StatusUnauthorized, utils.Errors.Unauthorized)
 				return
 			}
-			ctx = context.WithValue(ctx, models.EmailFromDecodedTempJWTKey, email)
+			ctx = context.WithValue(ctx, entities.EmailFromDecodedTempJWTKey, email)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		}
 
@@ -61,7 +61,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx = context.WithValue(ctx, models.UserContextKey, user)
+		ctx = context.WithValue(ctx, entities.UserContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
