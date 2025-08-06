@@ -32,7 +32,7 @@ func RateLimitMiddleware(next http.Handler) http.Handler {
 		limitCtx, err := config.Loaded.RateLimiter.Get(ctx, key)
 		if err != nil {
 			utils.LogError(ctx, "Could not get rate limiter in middleware", zap.Error(err))
-			utils.JSONError(w, http.StatusInternalServerError, utils.Errors.InternalServerError)
+			utils.JSONError(w, utils.Errors.InternalServerError)
 			return
 		}
 
@@ -62,7 +62,7 @@ func RateLimitMiddleware(next http.Handler) http.Handler {
 				zap.Int64("remaining", limitCtx.Remaining),
 				zap.Int64("reset", limitCtx.Reset),
 			)
-			utils.JSONError(w, http.StatusTooManyRequests, utils.Errors.TooManyAttempts)
+			utils.JSONError(w, utils.Errors.TooManyAttempts)
 			return
 		}
 		next.ServeHTTP(w, r)

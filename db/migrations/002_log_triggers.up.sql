@@ -228,7 +228,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_user_update_audit
 AFTER UPDATE ON users
 FOR EACH ROW
-WHEN WHEN (
+WHEN (
   OLD.email IS DISTINCT FROM NEW.email OR
   OLD.status IS DISTINCT FROM NEW.status OR
   OLD.role IS DISTINCT FROM NEW.role

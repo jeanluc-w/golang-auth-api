@@ -33,7 +33,7 @@ func getLogger(ctx context.Context) *zap.Logger {
 // Attaches the duration of the request and then sends a log to Sentry
 // with the passed error.
 func SendSentryLog(r *http.Request, err error) {
-	startTime := GetContextTime(r, entities.StartTimeContextKey)
+	startTime := GetContextTime(r.Context(), entities.StartTimeContextKey)
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		if !startTime.IsZero() {
 			scope.SetTag("duration_ms", fmt.Sprintf("%d", time.Since(startTime).Milliseconds()))

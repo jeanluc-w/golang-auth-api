@@ -21,12 +21,16 @@ func VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter
 		return
 	}
 
-	result, apiErr := services.VerifyEmailCode(ctx, payload.Email, payload.Code)
-	if apiErr != nil {
-		utils.JSONError(w, apiErr.Status, apiErr)
+	// Complete the service request
+	result, err := services.VerifyEmailCode(ctx, payload.Email, payload.Code)
+
+	// Return an error response if it failed
+	if err != nil {
+		utils.JSONError(w, *err)
 		return
 	}
 
+	// Return the temporary access token on success
 	utils.JSONResponse(w, http.StatusOK, map[string]any{
 		"message": "Email verified",
 		"token":   result.Token,

@@ -55,21 +55,17 @@ func JSONResponse(w http.ResponseWriter, status int, payload any) {
 }
 
 // Writes a structured JSON error response.
-func JSONError(w http.ResponseWriter, status int, detail ErrorDetail) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":   string(detail.Code),
-		"message": detail.Message,
+func JSONError(w http.ResponseWriter, err ErrorDetail) {
+	JSONResponse(w, err.Status, map[string]string{
+		"error":   string(err.Code),
+		"message": err.Message,
 	})
 }
 
 // Writes a structured JSON error response with an override message.
-func JSONErrorWithMessage(w http.ResponseWriter, status int, detail ErrorDetail, override string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":   string(detail.Code),
+func JSONErrorWithMessage(w http.ResponseWriter, err ErrorDetail, override string) {
+	JSONResponse(w, err.Status, map[string]string{
+		"error":   string(err.Code),
 		"message": override,
 	})
 }
@@ -121,15 +117,15 @@ func DecodeJSONHandler(w http.ResponseWriter, r *http.Request, dst interface{}, 
 		return true
 	}
 
-	// Map custom errors to HTTP status codes
-	var status int
+	// Map custom error responses
+	var finalError ErrorDetail
 	switch err {
 	case ErrRequestTooLarge:
-		status = http.StatusRequestEntityTooLarge // 413
+		finalError = Errors.InvalidPayloadSize
 	case ErrMalformedJSON, ErrExtraData, ErrEmptyBody:
-		status = http.StatusBadRequest // 400
+		finalError = Errors.InvalidPayload
 	default:
-		status = http.StatusInternalServerError // unexpected error
+		finalError = Errors.InternalServerError
 	}
 
 	// Log the error
@@ -138,6 +134,6 @@ func DecodeJSONHandler(w http.ResponseWriter, r *http.Request, dst interface{}, 
 	sentry.CaptureException(err)
 
 	// Send the error response
-	JSONError(w, status, Errors.InvalidPayload)
+	JSONError(w, finalError)
 	return false
 }

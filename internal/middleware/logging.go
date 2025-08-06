@@ -30,8 +30,8 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 			ctx := context.WithValue(r.Context(), entities.StartTimeContextKey, start)
 
 			// Extract user context and request ID
-			requestID := utils.GetContextString(r, entities.RequestContextKey, "")
-			userCtx, _ := r.Context().Value(entities.UserContextKey).(*entities.UserContext)
+			requestID := utils.GetContextString(ctx, entities.RequestContextKey, "")
+			userCtx, _ := ctx.Value(entities.UserContextKey).(*entities.UserContext)
 
 			// Create the dynamic Zap logger with useful fields always attached to any logs.
 			reqLogger := logger.With(
@@ -87,7 +87,7 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 						zap.Duration("duration", duration),
 					)
 
-					utils.JSONError(w, http.StatusInternalServerError, utils.Errors.InternalServerError)
+					utils.JSONError(w, utils.Errors.InternalServerError)
 					return
 				}
 				// Log the request completion with duration and HTTP status to Zap

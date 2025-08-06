@@ -46,7 +46,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 			email, err := auth.VerifyTemporaryJWT(authHeader)
 			if err != nil {
 				utils.LogDebug(ctx, "Temporary JWT validation failed", zap.Error(err))
-				utils.JSONError(w, http.StatusUnauthorized, utils.Errors.Unauthorized)
+				utils.JSONError(w, utils.Errors.Unauthorized)
 				return
 			}
 			ctx = context.WithValue(ctx, entities.EmailFromDecodedTempJWTKey, email)
@@ -57,7 +57,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 		user, err := auth.VerifyJWT(authHeader)
 		if err != nil {
 			utils.LogDebug(ctx, "JWT validation failed", zap.Error(err))
-			utils.JSONError(w, http.StatusUnauthorized, utils.Errors.Unauthorized)
+			utils.JSONError(w, utils.Errors.Unauthorized)
 			return
 		}
 

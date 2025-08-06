@@ -8,6 +8,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 
 	"edibubble-api/config"
+	"edibubble-api/internal/db/postgres"
 	"edibubble-api/internal/handlers"
 	"edibubble-api/internal/server"
 	"edibubble-api/internal/utils"
@@ -15,6 +16,7 @@ import (
 
 func main() {
 	config.Load()
+	postgres.InitQueries()
 
 	// Init Sentry
 	config.InitSentry(config.Loaded.SentryDSN, config.Loaded.SentrySampleRate)
@@ -32,10 +34,10 @@ func main() {
 
 	// Handle httprouters default NotFound and MethodNotAllowed
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		utils.JSONError(w, http.StatusNotFound, utils.Errors.RouteNotFound)
+		utils.JSONError(w, utils.Errors.RouteNotFound)
 	})
 	router.MethodNotAllowed = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		utils.JSONError(w, http.StatusMethodNotAllowed, utils.Errors.RouteNotFound)
+		utils.JSONError(w, utils.Errors.RouteNotFound)
 	})
 
 	// Wrap with middlewares

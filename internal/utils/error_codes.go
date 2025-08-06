@@ -1,12 +1,12 @@
 package utils
 
-// ErrorCode defines a named constant for a specific error condition.
-type ErrorCode string
+import "net/http"
 
-// ErrorDetail holds both the code and a default message.
+// ErrorDetail holds both the code, default message, and the HTTP status code
 type ErrorDetail struct {
-	Code    ErrorCode
+	Code    string
 	Message string
+	Status  int
 }
 
 // Error registry: centralized place for all error definitions.
@@ -15,21 +15,27 @@ var Errors = struct {
 	IncorrectCode         ErrorDetail
 	InternalServerError   ErrorDetail
 	InvalidEmailFormat    ErrorDetail
+	InvalidPasswordFormat ErrorDetail
 	InvalidPayload        ErrorDetail
+	InvalidPayloadMedia   ErrorDetail
+	InvalidPayloadSize    ErrorDetail
 	InvalidUsernameFormat ErrorDetail
 	RouteNotFound         ErrorDetail
 	TooManyAttempts       ErrorDetail
 	Unauthorized          ErrorDetail
 	UsernameTaken         ErrorDetail
 }{
-	CodeExpired:           ErrorDetail{"code_expired", "Verification code has expired"},
-	IncorrectCode:         ErrorDetail{"invalid_code", "Invalid verification code"},
-	InternalServerError:   ErrorDetail{"internal_server_error", "Something went wrong"},
-	InvalidEmailFormat:    ErrorDetail{"invalid_email_format", "Invalid email submitted"},
-	InvalidPayload:        ErrorDetail{"invalid_payload", "Invalid request payload"},
-	InvalidUsernameFormat: ErrorDetail{"invalid_username_format", "Invalid username submitted"},
-	RouteNotFound:         ErrorDetail{"route_not_found", "Requested route not found"},
-	TooManyAttempts:       ErrorDetail{"too_many_attempts", "Too many failed attempts"},
-	Unauthorized:          ErrorDetail{"unauthorized", "Unauthorized access"},
-	UsernameTaken:         ErrorDetail{"username_taken", "Username already in use"},
+	CodeExpired:           ErrorDetail{"code_expired", "Verification code has expired", http.StatusUnauthorized},        // 401
+	IncorrectCode:         ErrorDetail{"invalid_code", "Invalid verification code", http.StatusUnauthorized},            // 401
+	InternalServerError:   ErrorDetail{"internal_server_error", "Something went wrong", http.StatusInternalServerError}, // 500
+	InvalidEmailFormat:    ErrorDetail{"invalid_email_format", "Invalid email submitted", http.StatusBadRequest},        // 400
+	InvalidPasswordFormat: ErrorDetail{"invalid_password_format", "Invalid password length", http.StatusBadRequest},     // 400
+	InvalidPayload:        ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusBadRequest},             // 400
+	InvalidPayloadSize:    ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusRequestEntityTooLarge},  // 413
+	InvalidPayloadMedia:   ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusUnsupportedMediaType},   // 415
+	InvalidUsernameFormat: ErrorDetail{"invalid_username_format", "Invalid username submitted", http.StatusBadRequest},  // 400
+	RouteNotFound:         ErrorDetail{"route_not_found", "Requested route not found", http.StatusNotFound},             // 404
+	TooManyAttempts:       ErrorDetail{"too_many_attempts", "Too many failed attempts", http.StatusTooManyRequests},     // 429
+	Unauthorized:          ErrorDetail{"unauthorized", "Unauthorized access", http.StatusUnauthorized},                  // 401
+	UsernameTaken:         ErrorDetail{"username_taken", "Username already in use", http.StatusConflict},                // 409
 }

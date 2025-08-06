@@ -30,7 +30,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 	emailParsed := strings.ToLower(strings.TrimSpace(payload.Email))
 	if !utils.IsValidEmail(emailParsed) {
 		utils.LogDebug(ctx, "Invalid email format", zap.String("email", emailParsed))
-		utils.JSONError(w, http.StatusBadRequest, utils.Errors.InvalidEmailFormat)
+		utils.JSONError(w, utils.Errors.InvalidEmailFormat)
 		return
 	}
 
@@ -45,7 +45,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 		// Check if it's too early to regenerate another code
 		if now.Sub(meta.CreatedAt) < regenerateWindow {
 			utils.LogDebug(ctx, "Too early to regenerate code", zap.String("email", emailParsed), zap.Duration("wait_time", regenerateWindow-now.Sub(meta.CreatedAt)))
-			utils.JSONError(w, http.StatusTooManyRequests, utils.Errors.TooManyAttempts)
+			utils.JSONError(w, utils.Errors.TooManyAttempts)
 			return
 		}
 	}
@@ -66,7 +66,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 	utils.LogInfo(ctx, "Generated verification code, saving to Redis")
 	if err := auth.SaveVerificationCode(ctx, config.Loaded.RedisClient, emailParsed, otpMeta); err != nil {
 		utils.LogError(ctx, "Failed to save verification code", zap.Error(err))
-		utils.JSONError(w, http.StatusInternalServerError, utils.Errors.InternalServerError)
+		utils.JSONError(w, utils.Errors.InternalServerError)
 		return
 	}
 
@@ -75,7 +75,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 	id, err := email.SendEmailVerificationEmail(code, emailParsed)
 	if err != nil {
 		utils.LogError(ctx, "Failed to send verification email", zap.Error(err))
-		utils.JSONError(w, http.StatusInternalServerError, utils.Errors.InternalServerError)
+		utils.JSONError(w, utils.Errors.InternalServerError)
 		return
 	}
 

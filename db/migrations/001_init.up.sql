@@ -96,7 +96,7 @@ CREATE TABLE password_resets (
   expires_at TIMESTAMPTZ NOT NULL,
   used_at TIMESTAMPTZ,  -- Null if not used yet
   backup_codes JSONB, -- JSON array of backup codes for password reset
-  source reset_source NOT NULL,  -- 'web', 'mobile', 'admin', etc.
+  source reset_source NOT NULL  -- 'web', 'mobile', 'admin', etc.
 );
 
 

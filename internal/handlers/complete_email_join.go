@@ -1,26 +1,17 @@
 package handlers
 
 import (
-	"edibubble-api/internal/db/postgres"
-	"edibubble-api/internal/entities"
+	"edibubble-api/internal/services"
 	"edibubble-api/internal/utils"
 	"net/http"
 
+	"github.com/julienschmidt/httprouter"
 	"go.uber.org/zap"
 )
 
-func CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request) {
+func CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Starting CompleteEmailJoinHandler")
-
-	email := utils.GetContextString(r, entities.EmailFromDecodedTempJWTKey, "")
-
-	// Validate the email again just to make sure it's allowed in case of weird
-	// JWT exploits ocurred
-	if email == "" || !utils.IsValidEmail(email) {
-		utils.LogError(ctx, "Email pulled from context failed to pass validation", zap.String("email_parsed", email))
-		utils.JSONError(w, http.StatusUnauthorized, utils.Errors.Unauthorized)
-	}
 
 	// Decode the payload
 	var payload struct {
@@ -32,20 +23,29 @@ func CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check that username is valid
-	if !utils.IsValidUsername(payload.Username) {
-		utils.LogInfo(ctx, "Username failed validation")
-		utils.JSONError(w, http.StatusBadRequest, utils.Errors.InvalidUsernameFormat)
+	// Complete the service request
+	result, err := services.CompleteEmailJoin(
+		ctx,
+		payload.Username,
+		payload.Password,
+		payload.ConfirmPassword,
+	)
+
+	// Return an error response if it failed
+	if err != nil {
+		utils.JSONError(w, *err)
 		return
 	}
 
-	// Check username doesn't exist in DB
-	if postgres.IsUsernameTaken(payload.Username) {
-		utils.LogInfo(ctx, "Username is already taken")
-		utils.JSONError(w, http.StatusConflict, utils.Errors.UsernameTaken)
-		return
-	}
-
-	// Check that the password is valid
-
+	// Return the user's token on success
+	utils.LogInfo(ctx, "Account created successfully", zap.String("username", result.Username))
+	utils.JSONResponse(w, http.StatusCreated, map[string]any{
+		"message":       "Account created successfully",
+		"token":         result.AccessToken,
+		"refresh_token": result.RefreshToken,
+		"user": map[string]any{
+			"id":       result.UserID,
+			"username": result.Username,
+		},
+	})
 }
