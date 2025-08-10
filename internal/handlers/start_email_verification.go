@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (h *Handlers) StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Processing StartEmailVerificationHandler flow")
 
@@ -34,11 +34,11 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 		return
 	}
 
-	// TODO: Add validation that the user doesn't already exist in the DB
+	// TODO: Add validation that the user's email doesn't already exist in the auth table
 
 	// Check if the email was generated recently (within the past minute)
 	const regenerateWindow = 1 * time.Minute
-	meta, err := auth.GetVerificationCode(ctx, config.Loaded.RedisClient, emailParsed)
+	meta, err := auth.GetVerificationCode(ctx, h.Svcs.RedisClient, emailParsed)
 	if err == nil && meta != nil {
 		now := time.Now()
 
@@ -64,7 +64,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 
 	// Save the code to Redis DB
 	utils.LogInfo(ctx, "Generated verification code, saving to Redis")
-	if err := auth.SaveVerificationCode(ctx, config.Loaded.RedisClient, emailParsed, otpMeta); err != nil {
+	if err := auth.SaveVerificationCode(ctx, h.Svcs.RedisClient, emailParsed, otpMeta); err != nil {
 		utils.LogError(ctx, "Failed to save verification code", zap.Error(err))
 		utils.JSONError(w, utils.Errors.InternalServerError)
 		return
@@ -72,7 +72,7 @@ func StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ htt
 
 	// Send the email with the code through Resend.
 	utils.LogInfo(ctx, "Saved code to Redis, sending verification email", zap.String("email", emailParsed))
-	id, err := email.SendEmailVerificationEmail(code, emailParsed)
+	id, err := email.SendEmailVerificationEmail(code, emailParsed, h.Svcs.ResendClient)
 	if err != nil {
 		utils.LogError(ctx, "Failed to send verification email", zap.Error(err))
 		utils.JSONError(w, utils.Errors.InternalServerError)

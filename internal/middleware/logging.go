@@ -42,11 +42,14 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				zap.String("user_id", safe(userCtx, func(u *entities.UserContext) string { return u.ID })),
 				zap.String("remote_addr", r.RemoteAddr),
 			)
-			// Save that logger to the context
+			// Save that logger to the context for easy access in utils
 			ctx = context.WithValue(ctx, entities.LoggerContextKey, &utils.DynamicLogger{
 				Base:      reqLogger,
 				StartTime: start,
 			})
+			// Save request information here to context
+			ctx = context.WithValue(ctx, entities.ClientIPContextKey, r.RemoteAddr)
+			ctx = context.WithValue(ctx, entities.UserAgentContextKey, r.UserAgent())
 
 			// Update Sentry scope pre-request so the tags are always set
 			sentry.ConfigureScope(func(scope *sentry.Scope) {
@@ -63,7 +66,7 @@ func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 				scope.SetTag("user_role", safe(userCtx, func(u *entities.UserContext) string { return u.Role }))
 			})
 
-			// Update the request with the logger and start time
+			// Update the request with the updated context
 			r = r.WithContext(ctx)
 
 			// Set panic loggers for Sentry and Zap.

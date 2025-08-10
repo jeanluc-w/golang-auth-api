@@ -1,15 +1,12 @@
 package email
 
 import (
-	"edibubble-api/config"
 	"fmt"
 
 	"github.com/resend/resend-go/v2"
 )
 
-func SendEmailVerificationEmail(code string, toEmail string) (string, error) {
-	client := config.Loaded.ResendClient
-
+func SendEmailVerificationEmail(code string, toEmail string, client *resend.Client) (string, error) {
 	htmlBody, err := RenderVerificationHTML(code)
 	if err != nil {
 		return "", err

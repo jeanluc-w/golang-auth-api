@@ -8,7 +8,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-func VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (h *Handlers) VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Processing VerifyEmailCodeHandler flow")
 
@@ -22,7 +22,7 @@ func VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter
 	}
 
 	// Complete the service request
-	result, err := services.VerifyEmailCode(ctx, payload.Email, payload.Code)
+	result, err := services.VerifyEmailCode(ctx, h.Svcs.RedisClient, payload.Email, payload.Code)
 
 	// Return an error response if it failed
 	if err != nil {

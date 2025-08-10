@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (h *Handlers) CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Starting CompleteEmailJoinHandler")
 
@@ -26,6 +26,8 @@ func CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request, _ httprout
 	// Complete the service request
 	result, err := services.CompleteEmailJoin(
 		ctx,
+		h.Svcs.DB,
+		h.Svcs.RedisClient,
 		payload.Username,
 		payload.Password,
 		payload.ConfirmPassword,

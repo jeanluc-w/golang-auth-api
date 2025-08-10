@@ -8,7 +8,33 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
+	"github.com/resend/resend-go/v2"
+	"github.com/ulule/limiter/v3"
+	"go.uber.org/zap"
 )
+
+type Services struct {
+	DB           *pgxpool.Pool
+	RedisClient  *redis.Client
+	ResendClient *resend.Client
+	Limiter      *limiter.Limiter
+	Logger       *zap.Logger
+}
+
+func NewServices(
+	db *pgxpool.Pool,
+	redis *redis.Client,
+	resend *resend.Client,
+	lim *limiter.Limiter,
+	logger *zap.Logger,
+) *Services {
+	return &Services{
+		DB: db, RedisClient: redis, ResendClient: resend, Limiter: lim, Logger: logger,
+	}
+}
 
 // Start runs the HTTP server with graceful shutdown support.
 func Start(server *http.Server, shutdownTimeout time.Duration) {

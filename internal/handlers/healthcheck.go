@@ -7,7 +7,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-func HealthCheckHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+func (h *Handlers) HealthCheckHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Processing HealthCheckHandler flow")
 	utils.JSONResponse(w, http.StatusOK, map[string]string{

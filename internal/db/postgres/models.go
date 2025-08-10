@@ -5,13 +5,10 @@
 package postgres
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	"fmt"
-	"time"
 
-	"github.com/google/uuid"
-	"github.com/sqlc-dev/pqtype"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type AuditAction string
@@ -368,97 +365,98 @@ func (ns NullUserStatus) Value() (driver.Value, error) {
 }
 
 type AuditLog struct {
-	ID             uuid.UUID
-	ActorID        uuid.NullUUID
-	ActorUsername  sql.NullString
-	ActorEmail     sql.NullString
-	TargetUserID   uuid.NullUUID
-	TargetUsername sql.NullString
-	TargetEmail    sql.NullString
+	ID             pgtype.UUID
+	ActorID        pgtype.UUID
+	ActorUsername  pgtype.Text
+	ActorEmail     pgtype.Text
+	TargetUserID   pgtype.UUID
+	TargetUsername pgtype.Text
+	TargetEmail    pgtype.Text
 	Action         AuditAction
-	Changes        pqtype.NullRawMessage
-	Reason         sql.NullString
-	Ip             sql.NullString
-	UserAgent      sql.NullString
-	CreatedAt      sql.NullTime
+	Changes        []byte
+	Reason         pgtype.Text
+	Ip             pgtype.Text
+	UserAgent      pgtype.Text
+	CreatedAt      pgtype.Timestamptz
 }
 
 type AuthIdentity struct {
-	ID             uuid.UUID
-	UserID         uuid.NullUUID
+	ID             pgtype.UUID
+	UserID         pgtype.UUID
 	Provider       ProviderName
 	ProviderUserID string
-	PasswordHash   sql.NullString
-	FailedAttempts sql.NullInt32
-	LastFailedAt   sql.NullTime
-	LockedAt       sql.NullTime
-	LastLogin      sql.NullTime
-	CreatedAt      sql.NullTime
+	PasswordHash   pgtype.Text
+	FailedAttempts pgtype.Int4
+	LastFailedAt   pgtype.Timestamptz
+	LockedAt       pgtype.Timestamptz
+	LastLogin      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
 }
 
 type Login struct {
-	ID         uuid.UUID
-	UserID     uuid.NullUUID
-	IdentityID uuid.NullUUID
+	ID         pgtype.UUID
+	UserID     pgtype.UUID
+	IdentityID pgtype.UUID
 	Result     LoginResult
-	Ip         sql.NullString
-	UserAgent  sql.NullString
-	DeviceID   sql.NullString
-	Location   sql.NullString
-	CreatedAt  sql.NullTime
+	Ip         pgtype.Text
+	UserAgent  pgtype.Text
+	DeviceID   pgtype.Text
+	Location   pgtype.Text
+	CreatedAt  pgtype.Timestamptz
 }
 
 type MfaFactor struct {
-	ID                   uuid.UUID
-	UserID               uuid.NullUUID
-	AuthenticatorAppName sql.NullString
+	ID                   pgtype.UUID
+	UserID               pgtype.UUID
+	AuthenticatorAppName pgtype.Text
 	Type                 MfaType
-	Secret               sql.NullString
-	Enabled              sql.NullBool
-	Verified             sql.NullBool
-	CreatedAt            sql.NullTime
-	FailedAttempts       sql.NullInt32
-	LastUsedAt           sql.NullTime
-	Revoked              sql.NullBool
+	Secret               pgtype.Text
+	Enabled              pgtype.Bool
+	Verified             pgtype.Bool
+	CreatedAt            pgtype.Timestamptz
+	FailedAttempts       pgtype.Int4
+	LastUsedAt           pgtype.Timestamptz
+	Revoked              pgtype.Bool
 }
 
 type PasswordReset struct {
-	ID          uuid.UUID
-	UserID      uuid.NullUUID
+	ID          pgtype.UUID
+	UserID      pgtype.UUID
 	ResetToken  string
-	CreatedAt   sql.NullTime
-	ExpiresAt   time.Time
-	UsedAt      sql.NullTime
-	BackupCodes pqtype.NullRawMessage
+	CreatedAt   pgtype.Timestamptz
+	ExpiresAt   pgtype.Timestamptz
+	UsedAt      pgtype.Timestamptz
+	BackupCodes []byte
 	Source      ResetSource
 }
 
 type Session struct {
-	ID               uuid.UUID
-	UserID           uuid.NullUUID
-	CreatedAt        sql.NullTime
-	ExpiresAt        time.Time
-	RefreshTokenHash sql.NullString
-	RotatedAt        sql.NullTime
-	Revoked          sql.NullBool
-	RevokedAt        sql.NullTime
-	Ip               sql.NullString
-	UserAgent        sql.NullString
-	Metadata         pqtype.NullRawMessage
+	ID               pgtype.UUID
+	UserID           pgtype.UUID
+	CreatedAt        pgtype.Timestamptz
+	ExpiresAt        pgtype.Timestamptz
+	RefreshTokenHash pgtype.Text
+	RotatedAt        pgtype.Timestamptz
+	Revoked          pgtype.Bool
+	RevokedAt        pgtype.Timestamptz
+	Ip               pgtype.Text
+	UserAgent        pgtype.Text
+	Metadata         []byte
 }
 
 type User struct {
-	ID                 uuid.UUID
+	ID                 pgtype.UUID
 	Email              string
 	Username           string
-	ProfilePhotoUrl    sql.NullString
-	DisplayName        sql.NullString
-	CreatedAt          sql.NullTime
+	UsernameDisplay    string
+	ProfilePhotoUrl    pgtype.Text
+	DisplayName        pgtype.Text
+	CreatedAt          pgtype.Timestamptz
 	Status             NullUserStatus
-	Role               NullUserRole
-	LastLogin          sql.NullTime
-	LastPasswordChange sql.NullTime
+	Role               UserRole
+	LastLogin          pgtype.Timestamptz
+	LastPasswordChange pgtype.Timestamptz
 	Origin             NullUserOrigin
-	LastSeen           sql.NullTime
-	DeletedAt          sql.NullTime
+	LastSeen           pgtype.Timestamptz
+	DeletedAt          pgtype.Timestamptz
 }

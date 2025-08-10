@@ -1,36 +1,78 @@
 package main
 
 import (
+	"context"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/julienschmidt/httprouter"
+	"github.com/redis/go-redis/v9"
+	"github.com/resend/resend-go/v2"
+	"github.com/ulule/limiter/v3"
+	redisstore "github.com/ulule/limiter/v3/drivers/store/redis"
 
 	"edibubble-api/config"
-	"edibubble-api/internal/db/postgres"
 	"edibubble-api/internal/handlers"
 	"edibubble-api/internal/server"
 	"edibubble-api/internal/utils"
 )
 
 func main() {
+	// Load ENV variables
 	config.Load()
-	postgres.InitQueries()
 
 	// Init Sentry
 	config.InitSentry(config.Loaded.SentryDSN, config.Loaded.SentrySampleRate)
 	defer sentry.Flush(config.Loaded.SentryFlushTimeout)
 
+	// Init and ping the PostgreSQL connection pool
+	pgPool, err := pgxpool.New(context.Background(), config.Loaded.DSN)
+	if err != nil {
+		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+	}
+	if err := pgPool.Ping(context.Background()); err != nil {
+		log.Fatalf("PostgreSQL ping failed: %v", err)
+	}
+
+	// Init and ping the Redis Client
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:        config.Loaded.RedisAddress,
+		DB:          0,
+		DialTimeout: 5 * time.Second,
+	})
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+
+	// Init Resend Email Client
+	resendClient := resend.NewClient(config.Loaded.ResendAPIKey)
+
+	// Init Rate Limiter service
+	store, err := redisstore.NewStoreWithOptions(redisClient, limiter.StoreOptions{
+		Prefix:   "rl",
+		MaxRetry: 1,
+	})
+	if err != nil {
+		log.Fatalf("failed to create rate limiter store: %v", err)
+	}
+	limiterInstance := limiter.New(store, config.Loaded.RateLimit)
+
 	// Init Zap logger
 	logger := config.InitLogger(config.Loaded.Env)
 	defer logger.Sync()
 
-	// Define API routes
+	// Establish 3rd Party services so handlers/services can use them
+	services := server.NewServices(pgPool, redisClient, resendClient, limiterInstance, logger)
+
+	// Define API routes with the services available
+	h := handlers.New(services)
 	router := httprouter.New()
-	router.GET(server.V1_HealthCheck, handlers.HealthCheckHandler)
-	router.POST(server.V1_StartEmailVerification, handlers.StartEmailVerificationHandler)
-	router.POST(server.V1_VerifyEmail, handlers.VerifyEmailCodeHandler)
+	router.GET(server.V1_HealthCheck, h.HealthCheckHandler)
+	router.POST(server.V1_StartEmailVerification, h.StartEmailVerificationHandler)
+	router.POST(server.V1_VerifyEmail, h.VerifyEmailCodeHandler)
 
 	// Handle httprouters default NotFound and MethodNotAllowed
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -41,7 +83,7 @@ func main() {
 	})
 
 	// Wrap with middlewares
-	handler := handlers.BuildHandlerStack(router, logger)
+	handler := handlers.BuildHandlerStack(router, services)
 
 	// Create server
 	srv := &http.Server{

@@ -7,6 +7,14 @@ import (
 	"edibubble-api/internal/entities"
 )
 
+func ClientIPFromCtx(ctx context.Context) string {
+	return GetContextString(ctx, entities.ClientIPContextKey, "")
+}
+
+func UserAgentFromCtx(ctx context.Context) string {
+	return GetContextString(ctx, entities.UserAgentContextKey, "")
+}
+
 func GetContextString(ctx context.Context, key entities.ContextKey, fallback string) string {
 	if val, ok := ctx.Value(key).(string); ok {
 		return val

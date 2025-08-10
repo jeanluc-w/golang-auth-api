@@ -1,20 +1,13 @@
 package config
 
 import (
-	"context"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
-	"github.com/redis/go-redis/v9"
-	"github.com/resend/resend-go/v2"
 	"github.com/ulule/limiter/v3"
-	redisstore "github.com/ulule/limiter/v3/drivers/store/redis"
 )
 
 var Loaded *Config
@@ -22,85 +15,52 @@ var Loaded *Config
 type Config struct {
 	Env                string
 	Port               string
-	PGPool             *pgxpool.Pool
+	DSN                string
+	PasswordPeppersRaw string
+	ActivePepperID     string
 	SentryDSN          string
 	SentrySampleRate   float64
 	SentryFlushTimeout time.Duration
 	RequestTimeout     time.Duration
-	RateLimiter        *limiter.Limiter
-	RedisClient        *redis.Client
+	RateLimit          limiter.Rate
+	RedisAddress       string
 	JWTSecret          string
-	ResendClient       *resend.Client
+	ResendAPIKey       string
 	OTP_TTL            time.Duration
+	AccessTTL          time.Duration
+	RefreshTTL         time.Duration
 }
 
 func Load() *Config {
 	_ = godotenv.Load()
 
-	// Get variables
-	sentry_rate := parseFloatConfig("SENTRY_SAMPLE_RATE", "1")
-	timeout := parseIntConfig("REQUEST_TIMEOUT_SECONDS", "10")
-	limit := parseIntConfig("REQUEST_RATE_LIMIT", "10")
-	env := getStringConfig("ENV", "development")
-
-	// Establish and ping the Redis Client
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:        requireStringConfig("REDIS_ADDR"),
-		DB:          0,
-		DialTimeout: 5 * time.Second,
-	})
-	if err := redisClient.Ping(context.Background()).Err(); err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
-	}
-
-	// Establish and ping the PostgreSQL connection pool
-	dsn := requireStringConfig("DATABASE_URL")
-	pgPool, err := pgxpool.New(context.Background(), dsn)
-	if err != nil {
-		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
-	}
-	if err := pgPool.Ping(context.Background()); err != nil {
-		log.Fatalf("PostgreSQL ping failed: %v", err)
-	}
-
 	// Establish rate limiter
-	ratelimit := limiter.Rate{
+	rateLimit := limiter.Rate{
 		Period: time.Second,
-		Limit:  limit,
+		Limit:  parseIntConfig("REQUEST_RATE_LIMIT", "10"),
 	}
-	store, err := redisstore.NewStoreWithOptions(redisClient, limiter.StoreOptions{
-		Prefix:   "rl",
-		MaxRetry: 1,
-	})
-	if err != nil {
-		log.Fatalf("failed to create rate limiter store: %v", err)
-	}
-	limiterInstance := limiter.New(store, ratelimit)
 
 	// Establish Resend Client
 	resendApiKey := requireStringConfig("RESEND_API_KEY")
-	resendClient := resend.NewClient(resendApiKey)
-	// Validate Resend API Key by sending a dummy email (only for development)
-	if env == "production" {
-		if err := validateResendAPIKey(resendClient); err != nil {
-			log.Fatalf("Resend connection validation failed: %v", err)
-		}
-	}
 
 	// Return the completed configuration if successful with everything
 	Loaded = &Config{
-		Env:                env,
+		Env:                getStringConfig("ENV", "development"),
 		Port:               getStringConfig("PORT", "8080"),
-		PGPool:             pgPool,
+		DSN:                requireStringConfig("DATABASE_URL"),
+		PasswordPeppersRaw: requireStringConfig("PASSWORD_PEPPERS"),
+		ActivePepperID:     requireStringConfig("ACTIVE_PEPPER_ID"),
 		SentryDSN:          requireStringConfig("SENTRY_DSN"),
-		SentrySampleRate:   sentry_rate,
+		SentrySampleRate:   parseFloatConfig("SENTRY_SAMPLE_RATE", "1"),
 		SentryFlushTimeout: 2 * time.Second,
-		RedisClient:        redisClient,
-		RequestTimeout:     time.Duration(timeout * int64(time.Second)),
-		RateLimiter:        limiterInstance,
+		RedisAddress:       requireStringConfig("REDIS_ADDR"),
+		RequestTimeout:     time.Duration(parseIntConfig("REQUEST_TIMEOUT_SECONDS", "10") * int64(time.Second)),
+		RateLimit:          rateLimit,
 		JWTSecret:          requireStringConfig("JWT_SECRET"),
-		ResendClient:       resendClient,
+		ResendAPIKey:       resendApiKey,
 		OTP_TTL:            10 * time.Minute,
+		AccessTTL:          15 * time.Minute,
+		RefreshTTL:         14 * 24 * time.Hour,
 	}
 	return nil
 }
@@ -138,6 +98,7 @@ func requireStringConfig(key string) string {
 	return v
 }
 
+/* TODO: Move to test file
 func validateResendAPIKey(client *resend.Client) error {
 	dummy := &resend.SendEmailRequest{
 		To:      []string{"no-reply@mail.edibubble.com"},
@@ -156,3 +117,4 @@ func validateResendAPIKey(client *resend.Client) error {
 	}
 	return nil
 }
+*/

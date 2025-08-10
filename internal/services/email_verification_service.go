@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"edibubble-api/config"
 	"edibubble-api/internal/auth"
 	"edibubble-api/internal/utils"
 
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +17,7 @@ type VerificationResult struct {
 	Token string
 }
 
-func VerifyEmailCode(ctx context.Context, email string, code string) (*VerificationResult, *utils.ErrorDetail) {
+func VerifyEmailCode(ctx context.Context, redisClient *redis.Client, email string, code string) (*VerificationResult, *utils.ErrorDetail) {
 	// Validate that the email is valid
 	emailParsed := strings.ToLower(strings.TrimSpace(email))
 	if !utils.IsValidEmail(emailParsed) {
@@ -33,7 +33,7 @@ func VerifyEmailCode(ctx context.Context, email string, code string) (*Verificat
 	}
 
 	// Get the record from Redis
-	meta, err := auth.GetVerificationCode(ctx, config.Loaded.RedisClient, emailParsed)
+	meta, err := auth.GetVerificationCode(ctx, redisClient, emailParsed)
 	if err != nil {
 		utils.LogDebug(ctx, "Failed getting data from Redis", zap.Error(err))
 		return nil, &utils.Errors.IncorrectCode
@@ -55,7 +55,7 @@ func VerifyEmailCode(ctx context.Context, email string, code string) (*Verificat
 	if codeParsed != meta.Code {
 		// Wrong code, increment failed attempts, store back in Redis, and return error
 		meta.Attempts++
-		err = auth.SaveVerificationCode(ctx, config.Loaded.RedisClient, emailParsed, *meta)
+		err = auth.SaveVerificationCode(ctx, redisClient, emailParsed, *meta)
 		if err != nil {
 			utils.LogWarn(ctx, "Failed to update failed attempt in Redis", zap.Error(err))
 		}
@@ -65,14 +65,14 @@ func VerifyEmailCode(ctx context.Context, email string, code string) (*Verificat
 
 	// Attempt to generate a JWT for the user, return server error if it fails
 	utils.LogInfo(ctx, "Email verification successful", zap.String("email", emailParsed))
-	token, err := auth.GenerateTemporaryJWT(emailParsed, 30*time.Minute)
+	token, err := auth.GenerateTemporaryJWT(ctx, redisClient, emailParsed, 30*time.Minute)
 	if err != nil {
 		utils.LogError(ctx, "Failed to generate temporary JWT", zap.Error(err))
 		return nil, &utils.Errors.InternalServerError
 	}
 
 	// Clear the verification code from Redis
-	if err := config.Loaded.RedisClient.Del(ctx, fmt.Sprintf("email_code:%s", emailParsed)).Err(); err != nil {
+	if err := redisClient.Del(ctx, fmt.Sprintf("email_code:%s", emailParsed)).Err(); err != nil {
 		utils.LogWarn(ctx, "Failed to delete verification code from Redis", zap.Error(err))
 	}
 

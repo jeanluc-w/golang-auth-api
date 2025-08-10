@@ -7,46 +7,80 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 
-	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createEmailAuth = `-- name: CreateEmailAuth :exec
 INSERT INTO auth_identities (user_id, provider, provider_user_id, password_hash)
-VALUES ($1, 'email', $2, $3)
+VALUES (
+  $1, 
+  'email',
+  lower($2),                    -- provider_user_id = normalized email
+  $3
+)
 `
 
 type CreateEmailAuthParams struct {
-	UserID         uuid.NullUUID
-	ProviderUserID string
-	PasswordHash   sql.NullString
+	UserID       pgtype.UUID
+	Email        string
+	PasswordHash pgtype.Text
 }
 
 func (q *Queries) CreateEmailAuth(ctx context.Context, arg CreateEmailAuthParams) error {
-	_, err := q.db.ExecContext(ctx, createEmailAuth, arg.UserID, arg.ProviderUserID, arg.PasswordHash)
+	_, err := q.db.Exec(ctx, createEmailAuth, arg.UserID, arg.Email, arg.PasswordHash)
 	return err
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, username, role, origin)
-VALUES ($1, $2, 'user', 'email')
-RETURNING id, username
+INSERT INTO users (email, username, username_display, role, origin)
+VALUES (
+  lower($1),                    -- normalize email
+  lower($2),         -- canonical username (lowercased)
+  $2,                -- case-preserving display
+  'user',
+  'email'
+)
+RETURNING id, email, username, username_display, role
 `
 
 type CreateUserParams struct {
-	Email    string
-	Username string
+	Email           string
+	UsernameDisplay string
 }
 
 type CreateUserRow struct {
-	ID       uuid.UUID
-	Username string
+	ID              pgtype.UUID
+	Email           string
+	Username        string
+	UsernameDisplay string
+	Role            UserRole
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
-	row := q.db.QueryRowContext(ctx, createUser, arg.Email, arg.Username)
+	row := q.db.QueryRow(ctx, createUser, arg.Email, arg.UsernameDisplay)
 	var i CreateUserRow
-	err := row.Scan(&i.ID, &i.Username)
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Username,
+		&i.UsernameDisplay,
+		&i.Role,
+	)
 	return i, err
+}
+
+const usernameExists = `-- name: UsernameExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM users
+  WHERE username = lower($1)
+) AS exists
+`
+
+func (q *Queries) UsernameExists(ctx context.Context, username string) (bool, error) {
+	row := q.db.QueryRow(ctx, usernameExists, username)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

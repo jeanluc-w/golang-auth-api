@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- Users table
 CREATE TYPE user_role AS ENUM (
   'user',
@@ -18,20 +20,24 @@ CREATE TYPE user_origin AS ENUM (
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
-  username TEXT UNIQUE NOT NULL,
+  username TEXT UNIQUE NOT NULL, -- canonical lowercase username (used for lookups/uniqueness)
+  username_display TEXT NOT NULL, -- case-preserving display chosen by user
   profile_photo_url TEXT,
   display_name TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   status user_status DEFAULT 'disabled',
-  role user_role DEFAULT 'user',
+  role user_role DEFAULT 'user' NOT NULL,
   last_login TIMESTAMPTZ,
   last_password_change TIMESTAMPTZ, -- Null when only SSO is used
   origin user_origin, -- Useful for analytics of sign-ups, especially if multiple SSO providers are eventually used
   last_seen TIMESTAMPTZ, -- Last time the user was active in the app for live-time features
   deleted_at TIMESTAMPTZ, -- Allow soft deletes
-
-  -- Ensure username is alphanumeric, can include dots and underscores, but not start/end with a dot/underscore
-  CONSTRAINT username_format CHECK (username ~ '^[a-zA-Z0-9](?:[a-zA-Z0-9._]{0,28}[a-zA-Z0-9])?$')
+  -- Ensure username display is alphanumeric, can include dots and underscores, but not start/end with a dot/underscore
+  CONSTRAINT username_display_format
+    CHECK (username_display ~ '^[A-Za-z0-9](?:[A-Za-z0-9._]{0,28}[A-Za-z0-9])?$'),
+  -- Ensure canonical is always lowercase and matches display ignoring case
+  CONSTRAINT username_canonical_lower
+    CHECK (username = lower(username_display))
 );
 
 
@@ -178,3 +184,5 @@ CREATE INDEX idx_sessions_user_active ON sessions(user_id) WHERE revoked = FALSE
 CREATE INDEX idx_logins_user ON logins(user_id);
 CREATE INDEX idx_logins_identity ON logins(identity_id);
 CREATE INDEX idx_logins_user_created ON logins(user_id, created_at DESC);
+CREATE UNIQUE INDEX users_email_lower_uniq ON users (lower(email));
+CREATE UNIQUE INDEX users_username_uniq ON users (username);
