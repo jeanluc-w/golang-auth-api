@@ -1,4 +1,3 @@
-// internal/db/postgres/sessions.go
 package postgres
 
 import (
