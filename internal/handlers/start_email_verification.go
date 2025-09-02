@@ -1,17 +1,11 @@
 package handlers
 
 import (
-	"edibubble-api/config"
-	"edibubble-api/internal/auth"
-	"edibubble-api/internal/email"
-	"edibubble-api/internal/entities"
+	"edibubble-api/internal/services"
 	"edibubble-api/internal/utils"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"go.uber.org/zap"
 )
 
 func (h *Handlers) StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -26,60 +20,12 @@ func (h *Handlers) StartEmailVerificationHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// Validate that the email is valid
-	emailParsed := strings.ToLower(strings.TrimSpace(payload.Email))
-	if !utils.IsValidEmail(emailParsed) {
-		utils.LogDebug(ctx, "Invalid email format", zap.String("email", emailParsed))
-		utils.JSONError(w, utils.Errors.InvalidEmailFormat)
-		return
-	}
-
-	// TODO: Add validation that the user's email doesn't already exist in the auth table
-
-	// Check if the email was generated recently (within the past minute)
-	const regenerateWindow = 1 * time.Minute
-	meta, err := auth.GetVerificationCode(ctx, h.Svcs.RedisClient, emailParsed)
-	if err == nil && meta != nil {
-		now := time.Now()
-
-		// Check if it's too early to regenerate another code
-		if now.Sub(meta.CreatedAt) < regenerateWindow {
-			utils.LogDebug(ctx, "Too early to regenerate code", zap.String("email", emailParsed), zap.Duration("wait_time", regenerateWindow-now.Sub(meta.CreatedAt)))
-			utils.JSONError(w, utils.Errors.TooManyAttempts)
-			return
-		}
-	}
-
-	// Create a unique code and store it in Redis
-	utils.LogInfo(ctx, "Generating verification code for email", zap.String("email", emailParsed))
-	code := utils.GenerateCode()
-	currentTime := time.Now()
-	otpMeta := entities.OTPMeta{
-		Code:        code,
-		CreatedAt:   currentTime,
-		ExpiresAt:   currentTime.Add(config.Loaded.OTP_TTL),
-		Attempts:    0,
-		MaxAttempts: 5,
-	}
-
-	// Save the code to Redis DB
-	utils.LogInfo(ctx, "Generated verification code, saving to Redis")
-	if err := auth.SaveVerificationCode(ctx, h.Svcs.RedisClient, emailParsed, otpMeta); err != nil {
-		utils.LogError(ctx, "Failed to save verification code", zap.Error(err))
-		utils.JSONError(w, utils.Errors.InternalServerError)
-		return
-	}
-
-	// Send the email with the code through Resend.
-	utils.LogInfo(ctx, "Saved code to Redis, sending verification email", zap.String("email", emailParsed))
-	id, err := email.SendEmailVerificationEmail(code, emailParsed, h.Svcs.ResendClient)
+	// Complete the service request
+	err := services.StartEmailVerification(ctx, h.Svcs.DB, h.Svcs.RedisClient, h.Svcs.ResendClient, payload.Email)
 	if err != nil {
-		utils.LogError(ctx, "Failed to send verification email", zap.Error(err))
-		utils.JSONError(w, utils.Errors.InternalServerError)
+		utils.JSONError(w, *err)
 		return
 	}
 
-	// Respond with success
-	utils.LogInfo(ctx, "Verification email sent successfully", zap.String("email", emailParsed), zap.String("email_id", id))
 	utils.JSONResponse(w, http.StatusOK, map[string]string{"message": "Verification code sent"})
 }

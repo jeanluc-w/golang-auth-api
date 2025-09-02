@@ -73,6 +73,7 @@ func main() {
 	router.GET(server.V1_HealthCheck, h.HealthCheckHandler)
 	router.POST(server.V1_StartEmailVerification, h.StartEmailVerificationHandler)
 	router.POST(server.V1_VerifyEmail, h.VerifyEmailCodeHandler)
+	router.POST(server.V1_CompleteEmailJoin, h.CompleteEmailJoinHandler)
 
 	// Handle httprouters default NotFound and MethodNotAllowed
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -7,24 +7,14 @@ import (
 	"edibubble-api/internal/server"
 	"edibubble-api/internal/utils"
 	"net/http"
-	"strings"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
-func isOpenRoute(path string) bool {
-	for _, prefix := range server.OpenRoutes {
-		if strings.HasPrefix(path, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
-func isTemporaryJWTRoute(path string) bool {
-	for _, prefix := range server.TemporaryJWTRoutes {
-		if strings.HasPrefix(path, prefix) {
+func isAlternateRoute(path string, routes []string) bool {
+	for _, route := range routes {
+		if path == route {
 			return true
 		}
 	}
@@ -34,17 +24,19 @@ func isTemporaryJWTRoute(path string) bool {
 func JWTMiddleware(redisClient *redis.Client) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
 			// Ignore the routes where they are open to anyone
-			if isOpenRoute(r.URL.Path) {
+			if isAlternateRoute(r.URL.Path, server.OpenRoutes) {
 				next.ServeHTTP(w, r)
 				return
 			}
 
+			// If not open, get the token and validate.
 			authHeader := r.Header.Get("Authorization")
-			ctx := r.Context()
+			utils.LogDebug(ctx, "ROUTES", zap.Any("routes", server.TemporaryJWTRoutes), zap.Any("path", r.URL.Path))
 
-			// Verify the Temporary JWT IF it's the routes we allow them.
-			if isTemporaryJWTRoute(r.URL.Path) {
+			// Verify the Temporary JWT if the requested route is part of the temporary JWT validation routes
+			if isAlternateRoute(r.URL.Path, server.TemporaryJWTRoutes) {
 				email, id, err := auth.VerifyTemporaryJWT(ctx, redisClient, authHeader)
 				if err != nil {
 					utils.LogDebug(ctx, "Temporary JWT validation failed", zap.Error(err))

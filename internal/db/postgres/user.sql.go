@@ -11,27 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createEmailAuth = `-- name: CreateEmailAuth :exec
-INSERT INTO auth_identities (user_id, provider, provider_user_id, password_hash)
-VALUES (
-  $1, 
-  'email',
-  lower($2),                    -- provider_user_id = normalized email
-  $3
-)
-`
-
-type CreateEmailAuthParams struct {
-	UserID       pgtype.UUID
-	Email        string
-	PasswordHash pgtype.Text
-}
-
-func (q *Queries) CreateEmailAuth(ctx context.Context, arg CreateEmailAuthParams) error {
-	_, err := q.db.Exec(ctx, createEmailAuth, arg.UserID, arg.Email, arg.PasswordHash)
-	return err
-}
-
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, username, username_display, role, origin)
 VALUES (

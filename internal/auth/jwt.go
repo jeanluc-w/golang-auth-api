@@ -177,6 +177,7 @@ func parseJWT(authHeader string) (*entities.JWTClaims, error) {
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
 	// Parse the token with our custom claims
+	// TODO Change signing method to EdDSA
 	token, err := jwt.ParseWithClaims(tokenStr, &entities.JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
 		if t.Method != jwt.SigningMethodHS256 {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])

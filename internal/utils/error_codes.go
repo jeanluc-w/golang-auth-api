@@ -12,6 +12,7 @@ type ErrorDetail struct {
 // Error registry: centralized place for all error definitions.
 var Errors = struct {
 	CodeExpired           ErrorDetail
+	EmailIsTaken          ErrorDetail
 	IncorrectCode         ErrorDetail
 	InternalServerError   ErrorDetail
 	InvalidEmailFormat    ErrorDetail
@@ -27,6 +28,7 @@ var Errors = struct {
 	TokenGenerationFailed ErrorDetail
 }{
 	CodeExpired:           ErrorDetail{"code_expired", "Verification code has expired", http.StatusUnauthorized},                                 // 401
+	EmailIsTaken:          ErrorDetail{"email_is_taken", "Email is already taken", http.StatusConflict},                                          // 409
 	IncorrectCode:         ErrorDetail{"invalid_code", "Invalid verification code", http.StatusUnauthorized},                                     // 401
 	InternalServerError:   ErrorDetail{"internal_server_error", "Something went wrong", http.StatusInternalServerError},                          // 500
 	InvalidEmailFormat:    ErrorDetail{"invalid_email_format", "Invalid email submitted", http.StatusBadRequest},                                 // 400

@@ -7,7 +7,7 @@ const (
 	V1_Logout                 string = "/auth/v1/logout"
 	V1_StartEmailVerification string = "/auth/v1/start-email-verification"
 	V1_VerifyEmail            string = "/auth/v1/verify-email"
-	V1_CompleteEmailJoin      string = "/auth/v1/complete-join/email"
+	V1_CompleteEmailJoin      string = "/auth/v1/complete-email-join"
 	// Forgot password
 	// Change Password
 	// SSO
