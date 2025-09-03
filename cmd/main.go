@@ -70,12 +70,14 @@ func main() {
 	// Define API routes with the services available
 	h := handlers.New(services)
 	router := httprouter.New()
+	// Health Check API
 	router.GET(server.V1_HealthCheck, h.HealthCheckHandler)
+	// Email Join APIs
 	router.POST(server.V1_StartEmailVerification, h.StartEmailVerificationHandler)
 	router.POST(server.V1_VerifyEmail, h.VerifyEmailCodeHandler)
 	router.POST(server.V1_CompleteEmailJoin, h.CompleteEmailJoinHandler)
 
-	// Handle httprouters default NotFound and MethodNotAllowed
+	// Handle httprouters default NotFound and MethodNotAllowed responses
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		utils.JSONError(w, utils.Errors.RouteNotFound)
 	})
