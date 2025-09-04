@@ -21,4 +21,5 @@ If running into the Windows security popup, simply run `go build .\cmd\main; mai
 
 
 # SQL Commands on the Docker container
-`docker exec -it edibubble_postgres psql -U admin -d edibubble -c "SELECT * FROM table;"`
+Example:
+`docker exec -it edibubble_postgres psql -U admin -d edibubble -c "SELECT * FROM users;"`
