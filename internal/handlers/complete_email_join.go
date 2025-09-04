@@ -32,8 +32,6 @@ func (h *Handlers) CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Reque
 		payload.Password,
 		payload.ConfirmPassword,
 	)
-
-	// Return an error response if it failed
 	if err != nil {
 		utils.JSONError(w, *err)
 		return

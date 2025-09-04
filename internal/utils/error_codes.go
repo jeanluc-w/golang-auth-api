@@ -23,6 +23,7 @@ var Errors = struct {
 	InvalidUsernameFormat ErrorDetail
 	RouteNotFound         ErrorDetail
 	TooManyAttempts       ErrorDetail
+	TooSoonToRequest      ErrorDetail
 	Unauthorized          ErrorDetail
 	UsernameTaken         ErrorDetail
 	TokenGenerationFailed ErrorDetail
@@ -39,6 +40,7 @@ var Errors = struct {
 	InvalidUsernameFormat: ErrorDetail{"invalid_username_format", "Invalid username submitted", http.StatusBadRequest},                           // 400
 	RouteNotFound:         ErrorDetail{"route_not_found", "Requested route not found", http.StatusNotFound},                                      // 404
 	TooManyAttempts:       ErrorDetail{"too_many_attempts", "Too many failed attempts", http.StatusTooManyRequests},                              // 429
+	TooSoonToRequest:      ErrorDetail{"too_soon_to_request", "Please wait before requesting another code", http.StatusTooManyRequests},          // 429
 	Unauthorized:          ErrorDetail{"unauthorized", "Unauthorized access", http.StatusUnauthorized},                                           // 401
 	UsernameTaken:         ErrorDetail{"username_taken", "Username already in use", http.StatusConflict},                                         // 409
 	TokenGenerationFailed: ErrorDetail{"session_generation_failed", "Failed to generate session, please log-in", http.StatusInternalServerError}, // 500

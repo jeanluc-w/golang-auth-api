@@ -44,7 +44,7 @@ func StartEmailVerification(ctx context.Context, db *pgxpool.Pool, redisClient *
 		// Check if it's too early to regenerate another code
 		if now.Sub(meta.CreatedAt) < regenerateWindow {
 			utils.LogDebug(ctx, "Too early to regenerate code", zap.String("email", emailParsed), zap.Duration("wait_time", regenerateWindow-now.Sub(meta.CreatedAt)))
-			return &utils.Errors.TooManyAttempts
+			return &utils.Errors.TooSoonToRequest
 		}
 	}
 

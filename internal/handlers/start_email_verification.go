@@ -21,7 +21,13 @@ func (h *Handlers) StartEmailVerificationHandler(w http.ResponseWriter, r *http.
 	}
 
 	// Complete the service request
-	err := services.StartEmailVerification(ctx, h.Svcs.DB, h.Svcs.RedisClient, h.Svcs.ResendClient, payload.Email)
+	err := services.StartEmailVerification(
+		ctx,
+		h.Svcs.DB,
+		h.Svcs.RedisClient,
+		h.Svcs.ResendClient,
+		payload.Email,
+	)
 	if err != nil {
 		utils.JSONError(w, *err)
 		return

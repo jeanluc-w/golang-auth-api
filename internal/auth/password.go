@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// Tunable parameters (safe starting point for APIs; adjust after benchmarking on prod hardware)
+// Tunable parameters (safe starting point; TODO adjust after benchmarking on prod hardware)
 const (
 	argonTime    uint32 = 1         // iterations
 	argonMemory  uint32 = 64 * 1024 // 64 MiB
@@ -33,7 +33,7 @@ func randomSalt(n int) ([]byte, error) {
 func HashPasswordPHC(password string) (string, error) {
 	pm, err := NewStaticPepperManager(config.Loaded.PasswordPeppersRaw, config.Loaded.ActivePepperID)
 	if err != nil {
-		return "", errors.New("could not create pepper manager")
+		return "", err
 	}
 	// Verify the password
 	if !utils.IsValidPassword(password) {
@@ -50,7 +50,7 @@ func HashPasswordPHC(password string) (string, error) {
 	// Generate random salt
 	salt, err := randomSalt(saltLen)
 	if err != nil {
-		return "", fmt.Errorf("salt: %w", err)
+		return "", err
 	}
 
 	// Set up the argo setup given the
@@ -75,7 +75,7 @@ func VerifyPasswordPHC(password, phc string, tryAllIfMissing bool) (bool, error)
 		return false, errors.New("invalid PHC format")
 	}
 
-	// params: "m=65536,t=1,p=4,pepper=id2"
+	// params example: "m=65536,t=1,p=4,pepper=id2"
 	params := parts[3]
 	var mem, timeCost uint32
 	var threads uint8

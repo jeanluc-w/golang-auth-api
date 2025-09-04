@@ -25,7 +25,7 @@ CREATE TABLE users (
   profile_photo_url TEXT,
   display_name TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
-  status user_status DEFAULT 'disabled',
+  status user_status DEFAULT 'active',
   role user_role DEFAULT 'user' NOT NULL,
   last_login TIMESTAMPTZ,
   last_password_change TIMESTAMPTZ, -- Null when only SSO is used

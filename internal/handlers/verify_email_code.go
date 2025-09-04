@@ -22,9 +22,12 @@ func (h *Handlers) VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	// Complete the service request
-	result, err := services.VerifyEmailCode(ctx, h.Svcs.RedisClient, payload.Email, payload.Code)
-
-	// Return an error response if it failed
+	result, err := services.VerifyEmailCode(
+		ctx,
+		h.Svcs.RedisClient,
+		payload.Email,
+		payload.Code,
+	)
 	if err != nil {
 		utils.JSONError(w, *err)
 		return
