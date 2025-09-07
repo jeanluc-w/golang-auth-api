@@ -56,6 +56,7 @@ func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis
 		utils.LogInfo(ctx, "Username already taken")
 		return nil, &utils.Errors.UsernameTaken
 	}
+	// TODO Validate email isn't already taken in case they still have a temp token that wasn't deleted correctly
 
 	// Hash the password to be saved in the DB.
 	passwordHash, err := auth.HashPasswordPHC(password)

@@ -52,7 +52,8 @@ services:
         "migrate",
         "-path", "/migrations",
         "-database", "postgres://admin:superlongsecretpassword@postgres:5432/edibubble?sslmode=disable",
-        "down"
+        "down",
+        "-all"
       ]
 
 

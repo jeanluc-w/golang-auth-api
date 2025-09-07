@@ -13,10 +13,12 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
-// Tunable parameters (safe starting point; TODO adjust after benchmarking on prod hardware)
+// Tunable parameters (safe starting point; TODO adjust after benchmarking on prod hardware).
+// Increasing memory is generally more effective than increasing time, but also more expensive on server.
+// Find that happy middle :)
 const (
-	argonTime    uint32 = 1         // iterations
-	argonMemory  uint32 = 64 * 1024 // 64 MiB
+	argonTime    uint32 = 2          // iterations
+	argonMemory  uint32 = 128 * 1024 // 128 MiB
 	argonThreads uint8  = 4
 	saltLen             = 16
 	keyLen              = 32
