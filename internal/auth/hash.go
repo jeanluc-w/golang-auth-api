@@ -38,8 +38,7 @@ func (m *StaticPepperManager) ActivePepper() ([]byte, error) {
 	return nil, fmt.Errorf("active pepper id %q not found", m.activeID)
 }
 
-// Loads peppers from the env:
-// PASSWORD_PEPPERS="id1:base64,id2:base64", ACTIVE_PEPPER_ID="id2"
+// Loads peppers from the env and configure the Pepper Manager, used for passwords
 func NewStaticPepperManager(raw string, active string) (*StaticPepperManager, error) {
 	if raw == "" || active == "" {
 		return nil, errors.New("PASSWORD_PEPPERS or ACTIVE_PEPPER_ID missing")

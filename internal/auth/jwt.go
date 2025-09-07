@@ -32,19 +32,16 @@ func GenerateUserTokens(
 	userID, username, role string,
 	accessTTL, refreshTTL time.Duration,
 ) (*TokenPair, error) {
-	if config.Loaded.JWTSecret == "" {
-		return nil, errors.New("JWT secret not configured")
-	}
 	// Create session id
 	sessionID := uuid.NewString()
 
-	// 2) Access token (and access session entry)
+	// Access token and session in Redis
 	access, accessExp, err := generateAccessJWT(ctx, redisClient, sessionID, userID, username, role, accessTTL)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3) Refresh token (opaque), hash & persist in Redis
+	// 3) Refresh token , hash & persist in Redis
 	refresh, refreshExp, err := generateAndStoreRefresh(ctx, redisClient, sessionID, refreshTTL)
 	if err != nil {
 		return nil, err
@@ -60,6 +57,7 @@ func GenerateUserTokens(
 }
 
 // Generate an authentication JWT token with our custom claims for normal users
+// and store the session in Redis
 func generateAccessJWT(
 	ctx context.Context,
 	redisClient *redis.Client,
@@ -90,15 +88,15 @@ func generateAccessJWT(
 		return "", time.Time{}, fmt.Errorf("failed to create access session in redis: %w", err)
 	}
 
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims) // TODO: Change to EdDSA
-	signed, err := tok.SignedString([]byte(config.Loaded.JWTSecret))
+	tok := jwt.NewWithClaims(config.Loaded.JWTAlgorithm, claims)
+	signed, err := tok.SignedString(config.Loaded.JWTPrivateKey)
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	return signed, exp, nil
 }
 
-// Generate the refresh token
+// Generate the refresh token and store its hash in Redis
 func generateAndStoreRefresh(
 	ctx context.Context,
 	redisClient *redis.Client,
@@ -135,11 +133,6 @@ func randomToken(n int) (string, error) {
 
 // Generate a temporary JWT token with our custom claims
 func GenerateTemporaryJWT(ctx context.Context, redisClient *redis.Client, email string, ttl time.Duration) (string, error) {
-	secret := config.Loaded.JWTSecret
-	if secret == "" {
-		return "", errors.New("JWT secret not configured")
-	}
-
 	// Generate the token
 	sessionID := uuid.NewString()
 	now := time.Now()
@@ -163,8 +156,8 @@ func GenerateTemporaryJWT(ctx context.Context, redisClient *redis.Client, email 
 	}
 
 	// Sign and return the JWT
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims) // TODO: Change to EdDSA
-	return token.SignedString([]byte(secret))
+	token := jwt.NewWithClaims(config.Loaded.JWTAlgorithm, claims)
+	return token.SignedString(config.Loaded.JWTPrivateKey)
 }
 
 // Parse the JWT token from the Authorization header
@@ -177,12 +170,11 @@ func parseJWT(authHeader string) (*entities.JWTClaims, error) {
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
 	// Parse the token with our custom claims
-	// TODO Change signing method to EdDSA
 	token, err := jwt.ParseWithClaims(tokenStr, &entities.JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
-		if t.Method != jwt.SigningMethodHS256 {
+		if t.Method != config.Loaded.JWTAlgorithm {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
-		return []byte(config.Loaded.JWTSecret), nil
+		return config.Loaded.JWTPublicKey, nil
 	})
 
 	// Check if the token parsed successfully
@@ -222,7 +214,7 @@ func parseJWT(authHeader string) (*entities.JWTClaims, error) {
 }
 
 // Verify the JWT token and return the User data structure when succesful
-func VerifyJWT(ctx context.Context, redisClient *redis.Client, authHeader string) (*entities.UserContext, error) {
+func VerifyAndParseJWT(ctx context.Context, redisClient *redis.Client, authHeader string) (*entities.UserContext, error) {
 	// Extract the claims from the token
 	claims, err := parseJWT(authHeader)
 	if err != nil {

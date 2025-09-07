@@ -71,11 +71,6 @@ func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis
 		return nil, &utils.Errors.InternalServerError
 	}
 
-	// Delete the temporary JWT's session
-	if err := auth.DeleteTemporarySession(ctx, utils.GetContextString(ctx, entities.JTIFromDecodedTempJWTContextKey, ""), redisClient); err != nil {
-		utils.LogWarn(ctx, "Failed to delete the temp JWT's session", zap.Error(err))
-	}
-
 	// Generate the session in Redis and JWT token + refresh token for the new user
 	tokens, err := auth.GenerateUserTokens(
 		ctx,
@@ -92,7 +87,6 @@ func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis
 	}
 
 	// Store the Refresh token in the DB as well
-	// TODO fix the refresh token storage and redis deletion flow
 	q := postgres.New(db)
 	refreshHash := auth.HashRefreshToken(tokens.RefreshToken)
 	_, err = postgres.CreateRefreshSession(ctx, q, postgres.RefreshSessionInput{
@@ -110,6 +104,10 @@ func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis
 		return nil, &utils.Errors.TokenGenerationFailed
 	}
 
+	// Delete the temporary JWT's session
+	if err := auth.DeleteTemporarySession(ctx, utils.GetContextString(ctx, entities.JTIFromDecodedTempJWTContextKey, ""), redisClient); err != nil {
+		utils.LogWarn(ctx, "Failed to delete the temp JWT's session", zap.Error(err))
+	}
 	return &EmailJoinResult{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,

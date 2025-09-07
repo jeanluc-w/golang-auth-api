@@ -14,6 +14,7 @@ require (
 	github.com/redis/go-redis/v9 v9.11.0
 	github.com/resend/resend-go/v2 v2.21.0
 	github.com/ulule/limiter/v3 v3.11.2
+	github.com/youmark/pkcs8 v0.0.0-20240726163527-a2c0da244d78
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.37.0
 )

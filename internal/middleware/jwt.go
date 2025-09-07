@@ -50,7 +50,7 @@ func JWTMiddleware(redisClient *redis.Client) func(http.Handler) http.Handler {
 			}
 
 			// Verify the JWT token and get back the user object if successful
-			user, err := auth.VerifyJWT(ctx, redisClient, authHeader)
+			user, err := auth.VerifyAndParseJWT(ctx, redisClient, authHeader)
 			if err != nil {
 				utils.LogDebug(ctx, "JWT validation failed", zap.Error(err))
 				utils.JSONError(w, utils.Errors.Unauthorized)
