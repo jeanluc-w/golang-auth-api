@@ -34,6 +34,10 @@ openssl pkey -in ./secrets/jwt_private_key.pem -pubout -out ./secrets/jwt_public
 ## Running SQL Commands on the container
 Example:
 ```bash
+# Connect to the container's CLI
+docker exec -it edibubble_postgres psql -U admin -d edibubble
+
+# Run a specific sql query
 docker exec -it edibubble_postgres psql -U admin -d edibubble -c "SELECT * FROM users;"
 ```
 
