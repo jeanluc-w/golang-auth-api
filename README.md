@@ -14,10 +14,10 @@
 # Starting Golang Locally 
 
 ## macOS/Linux:
-Simply run `go run ./cmd/main` to start up the server.
+Simply run `go run ./cmd/main.go` to start up the server.
 
 ## Windows:
-If running into the Windows security popup, simply run `go build .\cmd\main; main.exe` so it will always run in the same folder, preventing the popup from repeated uses of running the program. Otherwise, `go run .\cmd\main` works as well but you'll get the "do you trust this program"
+If running into the Windows security popup, simply run `go build .\cmd\main.go; .\main.exe` so it will always run in the same folder, preventing the popup from repeated uses of running the program. Otherwise, `go run .\cmd\main.go` works as well but you'll get the "do you trust this program"
 
 
 # Useful Dev Commands
