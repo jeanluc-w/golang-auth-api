@@ -1,6 +1,8 @@
 package utils
 
-import "regexp"
+import (
+	"regexp"
+)
 
 // Email regex verifies that the email matches:
 // - Isn't empty
@@ -8,7 +10,7 @@ import "regexp"
 // - Contains only alphanumeric characters, dots, underscores, and hyphens
 // - Ends with a valid domain format
 // - Domain must have at least one dot and a valid TLD
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9_%+\-]+(?:\.[a-zA-Z0-9_%+\-]+)*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
 // Username regex verifies that the username matches:
 // - Isn't empty
@@ -16,7 +18,7 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.-]+\.[a-zA-Z
 // - Contains only alphanumeric characters, dots, and underscores in between (if any)
 // - Ends with an alphanumeric character
 // - Length between 2 and 30 characters (inclusive)
-var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9](?:[a-zA-Z0-9._]{0,28}[a-zA-Z0-9])?$`)
+var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._]{0,28}[a-zA-Z0-9]$`)
 
 // Verification code regex verifies that the code matches:
 // - Is exactly 6 digits long
