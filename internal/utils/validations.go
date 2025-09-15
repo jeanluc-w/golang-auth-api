@@ -10,7 +10,7 @@ import (
 // - Contains only alphanumeric characters, dots, underscores, and hyphens
 // - Ends with a valid domain format
 // - Domain must have at least one dot and a valid TLD
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9_%+\-]+(?:\.[a-zA-Z0-9_%+\-]+)*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
 // Username regex verifies that the username matches:
 // - Isn't empty
