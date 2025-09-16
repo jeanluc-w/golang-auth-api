@@ -22,6 +22,7 @@ var Errors = struct {
 	InvalidPayloadSize    ErrorDetail
 	InvalidUsernameFormat ErrorDetail
 	RouteNotFound         ErrorDetail
+	SessionExpired        ErrorDetail
 	TooManyAttempts       ErrorDetail
 	TooSoonToRequest      ErrorDetail
 	Unauthorized          ErrorDetail
@@ -39,6 +40,7 @@ var Errors = struct {
 	InvalidPayloadMedia:   ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusUnsupportedMediaType},                            // 415
 	InvalidUsernameFormat: ErrorDetail{"invalid_username_format", "Invalid username submitted", http.StatusBadRequest},                           // 400
 	RouteNotFound:         ErrorDetail{"route_not_found", "Requested route not found", http.StatusNotFound},                                      // 404
+	SessionExpired:        ErrorDetail{"session_expired", "Refresh token is invalid or expired", http.StatusTeapot},                              // 418
 	TooManyAttempts:       ErrorDetail{"too_many_attempts", "Too many failed attempts", http.StatusTooManyRequests},                              // 429
 	TooSoonToRequest:      ErrorDetail{"too_soon_to_request", "Please wait before requesting another code", http.StatusTooManyRequests},          // 429
 	Unauthorized:          ErrorDetail{"unauthorized", "Unauthorized access", http.StatusUnauthorized},                                           // 401
