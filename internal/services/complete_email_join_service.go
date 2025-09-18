@@ -21,7 +21,7 @@ type EmailJoinResult struct {
 }
 
 func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, username string, password string, confirmPassword string) (*EmailJoinResult, *utils.ErrorDetail) {
-	email := utils.GetContextString(ctx, entities.EmailFromDecodedTempJWTContextKey, "")
+	email := utils.GetContextString(ctx, entities.EmailFromTempJWTContextKey, "")
 	// Validate the email again just to make sure it's allowed just in case
 	if email == "" || !utils.IsValidEmail(email) {
 		utils.LogError(ctx, "Email pulled from context failed to pass validation", zap.String("email_parsed", email))
@@ -106,7 +106,7 @@ func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis
 	}
 
 	// Delete the temporary JWT's session
-	if err := auth.DeleteTemporarySession(ctx, utils.GetContextString(ctx, entities.JTIFromDecodedTempJWTContextKey, ""), redisClient); err != nil {
+	if err := auth.DeleteTemporarySession(ctx, utils.GetContextString(ctx, entities.JTIFromTempJWTContextKey, ""), redisClient); err != nil {
 		utils.LogWarn(ctx, "Failed to delete the temp JWT's session", zap.Error(err))
 	}
 	return &EmailJoinResult{

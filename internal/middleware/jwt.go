@@ -8,6 +8,7 @@ import (
 	"edibubble-api/internal/utils"
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -21,7 +22,7 @@ func isAlternateRoute(path string, routes []string) bool {
 	return false
 }
 
-func JWTMiddleware(redisClient *redis.Client) func(http.Handler) http.Handler {
+func JWTMiddleware(redisClient *redis.Client, db *pgxpool.Pool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -38,19 +39,27 @@ func JWTMiddleware(redisClient *redis.Client) func(http.Handler) http.Handler {
 
 			// TODO: Implement different Auth check if it's the token refresh route since the token should be expired.
 			if requestPath == server.V1_RefreshToken {
-
+				sessionId, err := auth.VerifyAndParseExpiredJWT(ctx, redisClient, db, authHeader)
+				if err != nil {
+					utils.LogDebug(ctx, "Refresh Expired JWT validation failed", zap.Error(err))
+					utils.JSONError(w, utils.Errors.Unauthorized)
+					return
+				}
+				ctx = context.WithValue(ctx, entities.SessionIDFromExpiredJWTContextKey, sessionId)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
 			}
 
 			// Temporary JWT Routes: Verify the Temporary JWT with different rules if the
 			if isAlternateRoute(requestPath, server.TemporaryJWTRoutes) {
-				email, id, err := auth.VerifyTemporaryJWT(ctx, redisClient, authHeader)
+				email, id, err := auth.VerifyAndParseTemporaryJWT(ctx, redisClient, authHeader)
 				if err != nil {
 					utils.LogDebug(ctx, "Temporary JWT validation failed", zap.Error(err))
 					utils.JSONError(w, utils.Errors.Unauthorized)
 					return
 				}
-				ctx = context.WithValue(ctx, entities.EmailFromDecodedTempJWTContextKey, email)
-				ctx = context.WithValue(ctx, entities.JTIFromDecodedTempJWTContextKey, id)
+				ctx = context.WithValue(ctx, entities.EmailFromTempJWTContextKey, email)
+				ctx = context.WithValue(ctx, entities.JTIFromTempJWTContextKey, id)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}

@@ -13,7 +13,7 @@ func BuildHandlerStack(router http.Handler, svcs *server.Services) http.Handler 
 				middleware.JSONMiddleware(
 					middleware.ResponseHeadersMiddleware(
 						middleware.RateLimitMiddleware(svcs.Limiter)(
-							middleware.JWTMiddleware(svcs.RedisClient)(
+							middleware.JWTMiddleware(svcs.RedisClient, svcs.DB)(
 								middleware.TimeoutMiddleware(
 									router,
 								),

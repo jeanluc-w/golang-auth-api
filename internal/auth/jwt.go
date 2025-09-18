@@ -13,6 +13,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -68,15 +69,14 @@ func generateAccessJWT(
 	exp := now.Add(ttl)
 
 	claims := entities.JWTClaims{
-		SessionID: sessionID,
-		UserID:    userID,
-		Username:  username,
-		Role:      role,
+		UserID:   userID,
+		Username: username,
+		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
 			Issuer:    "edibubble-api",
 			Audience:  jwt.ClaimStrings{"edibubble-app"},
-			ID:        uuid.NewString(),
+			ID:        sessionID,
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now.Add(-5 * time.Second)),
@@ -188,11 +188,6 @@ func parseJWT(authHeader string) (*entities.JWTClaims, error) {
 		return nil, errors.New("invalid claims")
 	}
 
-	// Check expiration time on it
-	if claims.ExpiresAt == nil || time.Now().After(claims.ExpiresAt.Time) {
-		return nil, errors.New("token expired")
-	}
-
 	// Validate the audience claim
 	audValid := false
 	for _, aud := range claims.RegisteredClaims.Audience {
@@ -210,6 +205,11 @@ func parseJWT(authHeader string) (*entities.JWTClaims, error) {
 		return nil, errors.New("invalid issuer")
 	}
 
+	// Check expiration time on it
+	if claims.ExpiresAt == nil || time.Now().After(claims.ExpiresAt.Time) {
+		return nil, errors.New("token expired")
+	}
+
 	return claims, nil
 }
 
@@ -222,12 +222,12 @@ func VerifyAndParseJWT(ctx context.Context, redisClient *redis.Client, authHeade
 	}
 
 	// Validate the custom user claims
-	if claims.UserID == "" || claims.SessionID == "" {
+	if claims.UserID == "" || claims.ID == "" || claims.Role == "joiner" {
 		return nil, errors.New("invalid claims")
 	}
 
 	// Check Redis-backed session validity
-	if !IsValidSession(ctx, claims.SessionID, claims.ExpiresAt.Time, redisClient) {
+	if !IsValidSession(ctx, claims.ID, claims.ExpiresAt.Time, redisClient) {
 		return nil, errors.New("session expired or invalid")
 	}
 
@@ -235,12 +235,12 @@ func VerifyAndParseJWT(ctx context.Context, redisClient *redis.Client, authHeade
 		ID:        claims.UserID,
 		Username:  claims.Username,
 		Role:      claims.Role,
-		SessionID: claims.SessionID,
+		SessionID: claims.ID,
 	}
 	return user, nil
 }
 
-func VerifyTemporaryJWT(ctx context.Context, redisClient *redis.Client, authHeader string) (email string, id string, err error) {
+func VerifyAndParseTemporaryJWT(ctx context.Context, redisClient *redis.Client, authHeader string) (email string, id string, err error) {
 	// Extract the claims from the token
 	claims, err := parseJWT(authHeader)
 	if err != nil {
@@ -248,7 +248,7 @@ func VerifyTemporaryJWT(ctx context.Context, redisClient *redis.Client, authHead
 	}
 
 	// Check if the claims are valid
-	if claims.Subject == "" || claims.Role != "joiner" || claims.ID == "" {
+	if claims.Subject == "" || claims.ID == "" || claims.Role != "joiner" {
 		return "", "", errors.New("invalid claims")
 	}
 
@@ -259,4 +259,24 @@ func VerifyTemporaryJWT(ctx context.Context, redisClient *redis.Client, authHead
 
 	// Return the email from the Subject claim
 	return claims.Subject, claims.ID, nil
+}
+
+func VerifyAndParseExpiredJWT(ctx context.Context, redisClient *redis.Client, db *pgxpool.Pool, authHeader string) (string, error) {
+	// Extract the claims from the token
+	claims, err := parseJWT(authHeader)
+
+	// If the error isn't token expired, forward the error.
+	// If the error was empty, return an error that the token isn't expired
+	if err != errors.New("token expired") {
+		return "", err
+	} else if err == nil {
+		return "", errors.New("token is valid and not expired")
+	}
+
+	// Check if the claims are valid
+	if claims.UserID == "" || claims.ID == "" || claims.Role == "joiner" {
+		return "", errors.New("invalid claims")
+	}
+
+	return claims.ID, nil
 }
