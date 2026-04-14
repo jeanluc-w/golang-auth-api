@@ -1,5 +1,7 @@
 # Overview
 
+This repo is what I was building as a in-house authentication system for another custom project using the technology below.  Although not fully completed simply because I changed directions for the project, it still has a pretty decent authentication implementation + design. I had fun practicing Golang and implementing what I know about safe auth systems. Archiving and making public so people can copy what I did if they want, but be wary as time will lead to better security practices so this would become outdated.
+
 ## Technology to Learn/Use
 
 - Go: REST API Framework
@@ -17,7 +19,7 @@
 Simply run `go run ./cmd/main.go` to start up the server.
 
 ## Windows:
-If running into the Windows security popup, simply run `go build .\cmd\main.go; .\main.exe` so it will always run in the same folder, preventing the popup from repeated uses of running the program. Otherwise, `go run .\cmd\main.go` works as well but you'll get the "do you trust this program"
+If running into the Windows security popup, simply run `go build .\cmd\main.go; .\main.exe` to compile it as an executable and it will always run in the same folder, preventing the popup from repeated uses of running the program. Otherwise, `go run .\cmd\main.go` works as well but you'll get the "do you trust this program" all the time.
 
 
 # Useful Dev Commands
