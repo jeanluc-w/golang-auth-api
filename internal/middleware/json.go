@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"edibubble-api/internal/utils"
+	"auth-api/internal/utils"
 	"net/http"
 	"strings"
 )

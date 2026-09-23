@@ -2,7 +2,7 @@ package auth
 
 import (
 	"context"
-	"edibubble-api/internal/db/postgres"
+	"auth-api/internal/db/postgres"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

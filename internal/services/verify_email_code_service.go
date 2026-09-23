@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"edibubble-api/internal/auth"
-	"edibubble-api/internal/utils"
+	"auth-api/internal/auth"
+	"auth-api/internal/utils"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"

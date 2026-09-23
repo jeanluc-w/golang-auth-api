@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"edibubble-api/internal/entities"
-	"edibubble-api/internal/utils"
+	"auth-api/internal/entities"
+	"auth-api/internal/utils"
 
 	"github.com/getsentry/sentry-go"
 	"go.uber.org/zap"

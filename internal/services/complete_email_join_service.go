@@ -2,11 +2,11 @@ package services
 
 import (
 	"context"
-	"edibubble-api/config"
-	"edibubble-api/internal/auth"
-	"edibubble-api/internal/db/postgres"
-	"edibubble-api/internal/entities"
-	"edibubble-api/internal/utils"
+	"auth-api/config"
+	"auth-api/internal/auth"
+	"auth-api/internal/db/postgres"
+	"auth-api/internal/entities"
+	"auth-api/internal/utils"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"

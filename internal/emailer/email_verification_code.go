@@ -14,9 +14,9 @@ func SendEmailVerificationEmail(code string, toEmail string, client *resend.Clie
 
 	emailFormat := &resend.SendEmailRequest{
 		To:      []string{toEmail},
-		From:    "Edibubble <no-reply@mail.edibubble.com>",
+		From:    "auth <no-reply@mail.auth.com>",
 		Subject: "Verification Code",
-		Text:    fmt.Sprintf("Your Edibubble verification code is: %s", code),
+		Text:    fmt.Sprintf("Your auth verification code is: %s", code),
 		Html:    htmlBody,
 	}
 

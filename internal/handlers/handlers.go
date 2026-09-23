@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"edibubble-api/internal/server"
+	"auth-api/internal/server"
 )
 
 type Handlers struct {

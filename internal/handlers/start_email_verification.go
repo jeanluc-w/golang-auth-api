@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"edibubble-api/internal/services"
-	"edibubble-api/internal/utils"
+	"auth-api/internal/services"
+	"auth-api/internal/utils"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"

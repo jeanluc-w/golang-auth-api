@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"context"
-	"edibubble-api/internal/utils"
+	"auth-api/internal/utils"
 	"errors"
 
 	"github.com/jackc/pgx/v5/pgtype"

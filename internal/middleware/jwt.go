@@ -2,10 +2,10 @@ package middleware
 
 import (
 	"context"
-	"edibubble-api/internal/auth"
-	"edibubble-api/internal/entities"
-	"edibubble-api/internal/server"
-	"edibubble-api/internal/utils"
+	"auth-api/internal/auth"
+	"auth-api/internal/entities"
+	"auth-api/internal/server"
+	"auth-api/internal/utils"
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"

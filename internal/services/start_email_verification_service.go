@@ -2,11 +2,11 @@ package services
 
 import (
 	"context"
-	"edibubble-api/config"
-	"edibubble-api/internal/auth"
-	"edibubble-api/internal/emailer"
-	"edibubble-api/internal/entities"
-	"edibubble-api/internal/utils"
+	"auth-api/config"
+	"auth-api/internal/auth"
+	"auth-api/internal/emailer"
+	"auth-api/internal/entities"
+	"auth-api/internal/utils"
 	"strings"
 	"time"
 

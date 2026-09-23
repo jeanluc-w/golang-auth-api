@@ -3,24 +3,24 @@ version: '3.8'
 services:
   redis:
     image: redis:7
-    container_name: edibubble_redis
+    container_name: auth_redis
     ports:
       - "6379:6379"
     networks:
-      - edibubble-net
+      - auth-net
 
   postgres:
     image: postgres:16
-    container_name: edibubble_postgres
+    container_name: auth_postgres
     restart: always
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: superlongsecretpassword
-      POSTGRES_DB: edibubble
+      POSTGRES_DB: auth
     ports:
       - "5432:5432"
     networks:
-      - edibubble-net
+      - auth-net
     volumes:
       - pg_data:/var/lib/postgresql/data
 
@@ -29,14 +29,14 @@ services:
     depends_on:
       - postgres
     networks:
-      - edibubble-net
+      - auth-net
     volumes:
       - ./db/migrations:/migrations
     entrypoint:
       [
         "migrate",
         "-path", "/migrations",
-        "-database", "postgres://admin:superlongsecretpassword@postgres:5432/edibubble?sslmode=disable",
+        "-database", "postgres://admin:superlongsecretpassword@postgres:5432/auth?sslmode=disable",
         "up"
       ]
   migrate-down:
@@ -44,14 +44,14 @@ services:
     depends_on:
       - postgres
     networks:
-      - edibubble-net
+      - auth-net
     volumes:
       - ./db/migrations:/migrations
     entrypoint:
       [
         "migrate",
         "-path", "/migrations",
-        "-database", "postgres://admin:superlongsecretpassword@postgres:5432/edibubble?sslmode=disable",
+        "-database", "postgres://admin:superlongsecretpassword@postgres:5432/auth?sslmode=disable",
         "down",
         "-all"
       ]
@@ -61,5 +61,5 @@ volumes:
   pg_data:
 
 networks:
-  edibubble-net:
+  auth-net:
     driver: bridge

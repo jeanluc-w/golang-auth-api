@@ -3,8 +3,8 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"edibubble-api/config"
-	"edibubble-api/internal/entities"
+	"auth-api/config"
+	"auth-api/internal/entities"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -74,8 +74,8 @@ func generateAccessJWT(
 		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
-			Issuer:    "edibubble-api",
-			Audience:  jwt.ClaimStrings{"edibubble-app"},
+			Issuer:    "auth-api",
+			Audience:  jwt.ClaimStrings{"auth-app"},
 			ID:        sessionID,
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -141,8 +141,8 @@ func GenerateTemporaryJWT(ctx context.Context, redisClient *redis.Client, email 
 		Role: "joiner",
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   email,
-			Issuer:    "edibubble-api",
-			Audience:  jwt.ClaimStrings{"edibubble-app"},
+			Issuer:    "auth-api",
+			Audience:  jwt.ClaimStrings{"auth-app"},
 			ID:        sessionID,
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -191,7 +191,7 @@ func parseJWT(authHeader string) (*entities.JWTClaims, error) {
 	// Validate the audience claim
 	audValid := false
 	for _, aud := range claims.RegisteredClaims.Audience {
-		if aud == "edibubble-app" {
+		if aud == "auth-app" {
 			audValid = true
 			break
 		}
@@ -201,7 +201,7 @@ func parseJWT(authHeader string) (*entities.JWTClaims, error) {
 	}
 
 	// Validate the Issuer claim
-	if claims.RegisteredClaims.Issuer != "edibubble-api" {
+	if claims.RegisteredClaims.Issuer != "auth-api" {
 		return nil, errors.New("invalid issuer")
 	}
 

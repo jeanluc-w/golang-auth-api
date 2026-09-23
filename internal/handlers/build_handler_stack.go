@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"edibubble-api/internal/middleware"
-	"edibubble-api/internal/server"
+	"auth-api/internal/middleware"
+	"auth-api/internal/server"
 	"net/http"
 )
 

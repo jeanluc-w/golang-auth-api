@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"edibubble-api/internal/entities"
+	"auth-api/internal/entities"
 )
 
 func ClientIPFromCtx(ctx context.Context) string {

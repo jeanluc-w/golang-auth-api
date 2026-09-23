@@ -2,8 +2,8 @@ package auth
 
 import (
 	"context"
-	"edibubble-api/config"
-	"edibubble-api/internal/entities"
+	"auth-api/config"
+	"auth-api/internal/entities"
 	"encoding/json"
 	"fmt"
 	"time"

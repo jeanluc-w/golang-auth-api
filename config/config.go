@@ -161,8 +161,8 @@ func loadPublicKey(filename string) ed25519.PublicKey {
 /* TODO: Move to test file
 func validateResendAPIKey(client *resend.Client) error {
 	dummy := &resend.SendEmailRequest{
-		To:      []string{"no-reply@mail.edibubble.com"},
-		From:    "Edibubble <no-reply@mail.edibubble.com>",
+		To:      []string{"no-reply@mail.auth.com"},
+		From:    "auth <no-reply@mail.auth.com>",
 		Subject: "Test",
 		Text:    "This is a test.",
 	}

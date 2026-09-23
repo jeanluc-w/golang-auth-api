@@ -37,15 +37,15 @@ openssl pkey -in ./secrets/jwt_private_key.pem -pubout -out ./secrets/jwt_public
 Example:
 ```bash
 # Connect to the container's CLI
-docker exec -it edibubble_postgres psql -U admin -d edibubble
+docker exec -it auth_postgres psql -U admin -d auth
 
 # Run a specific sql query
-docker exec -it edibubble_postgres psql -U admin -d edibubble -c "SELECT * FROM users;"
+docker exec -it auth_postgres psql -U admin -d auth -c "SELECT * FROM users;"
 ```
 
 ## Connect to Redis CLI
 ```bash
-docker exec -it edibubble_redis redis-cli
+docker exec -it auth_redis redis-cli
 ```
 
 Quick Commands for Redis CLI

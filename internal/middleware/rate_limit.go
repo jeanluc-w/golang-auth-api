@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"edibubble-api/internal/entities"
-	"edibubble-api/internal/utils"
+	"auth-api/internal/entities"
+	"auth-api/internal/utils"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/ulule/limiter/v3"

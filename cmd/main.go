@@ -14,10 +14,10 @@ import (
 	"github.com/ulule/limiter/v3"
 	redisstore "github.com/ulule/limiter/v3/drivers/store/redis"
 
-	"edibubble-api/config"
-	"edibubble-api/internal/handlers"
-	"edibubble-api/internal/server"
-	"edibubble-api/internal/utils"
+	"auth-api/config"
+	"auth-api/internal/handlers"
+	"auth-api/internal/server"
+	"auth-api/internal/utils"
 )
 
 func main() {

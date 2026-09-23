@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"edibubble-api/config"
+	"auth-api/config"
 	"net/http"
 )
 
@@ -12,7 +12,7 @@ func ResponseHeadersMiddleware(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		} else {
 			// Strict in production
-			w.Header().Set("Access-Control-Allow-Origin", "https://edibubble.com")
+			w.Header().Set("Access-Control-Allow-Origin", "https://auth.com")
 		}
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")

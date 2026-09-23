@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"context"
-	"edibubble-api/internal/entities"
+	"auth-api/internal/entities"
 	"net/http"
 
 	"github.com/google/uuid"

@@ -2,7 +2,7 @@ package utils
 
 import (
 	"context"
-	"edibubble-api/internal/entities"
+	"auth-api/internal/entities"
 	"fmt"
 	"net/http"
 	"time"

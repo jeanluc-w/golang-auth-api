@@ -3,8 +3,8 @@ package auth
 import (
 	"crypto/rand"
 	"crypto/subtle"
-	"edibubble-api/config"
-	"edibubble-api/internal/utils"
+	"auth-api/config"
+	"auth-api/internal/utils"
 	"encoding/base64"
 	"errors"
 	"fmt"
