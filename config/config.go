@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -18,27 +19,36 @@ import (
 var Loaded *Config
 
 type Config struct {
-	Env                string
-	Port               string
-	DSN                string
-	PasswordPeppersRaw string
-	ActivePepperID     string
-	SentryDSN          string
-	SentrySampleRate   float64
-	SentryFlushTimeout time.Duration
-	RequestTimeout     time.Duration
-	RateLimit          limiter.Rate
-	RedisAddress       string
-	ResendAPIKey       string
-	OTP_TTL            time.Duration
-	AccessTTL          time.Duration
-	RefreshTTL         time.Duration
-	JWTPrivateKey      ed25519.PrivateKey
-	JWTPublicKey       ed25519.PublicKey
-	JWTAlgorithm       jwt.SigningMethod
+	Env                    string
+	Port                   string
+	DSN                    string
+	PasswordPeppersRaw     string
+	ActivePepperID         string
+	SentryDSN              string
+	SentrySampleRate       float64
+	SentryFlushTimeout     time.Duration
+	RequestTimeout         time.Duration
+	RateLimit              limiter.Rate
+	RedisAddress           string
+	ResendAPIKey           string
+	EmailFromAddress       string
+	AllowedOrigins         []string
+	OTP_TTL                time.Duration
+	AccessTTL              time.Duration
+	RefreshTTL             time.Duration
+	TemporaryTokenTTL      time.Duration
+	LoginMaxFailedAttempts int
+	LoginLockDuration      time.Duration
+	JWTPrivateKey          ed25519.PrivateKey
+	JWTPublicKey           ed25519.PublicKey
+	JWTAlgorithm           jwt.SigningMethod
 }
 
-func Load() *Config {
+// Load reads configuration from the environment (and .env file, if present),
+// validates it, and populates the package-level Loaded config. It fatals on
+// any missing/invalid required configuration, since the service cannot run
+// safely without it.
+func Load() {
 	_ = godotenv.Load()
 
 	// Establish rate limiter
@@ -47,28 +57,31 @@ func Load() *Config {
 		Limit:  parseIntConfig("REQUEST_RATE_LIMIT", "10"),
 	}
 
-	// Return the completed configuration if successful with everything
 	Loaded = &Config{
-		Env:                getStringConfig("ENV", "development"),
-		Port:               getStringConfig("PORT", "8080"),
-		DSN:                requireStringConfig("DATABASE_URL"),
-		PasswordPeppersRaw: requireStringConfig("PASSWORD_PEPPERS"),
-		ActivePepperID:     requireStringConfig("ACTIVE_PEPPER_ID"),
-		SentryDSN:          requireStringConfig("SENTRY_DSN"),
-		SentrySampleRate:   parseFloatConfig("SENTRY_SAMPLE_RATE", "1"),
-		SentryFlushTimeout: 2 * time.Second,
-		RedisAddress:       requireStringConfig("REDIS_ADDR"),
-		RequestTimeout:     time.Duration(parseIntConfig("REQUEST_TIMEOUT_SECONDS", "10") * int64(time.Second)),
-		RateLimit:          rateLimit,
-		ResendAPIKey:       requireStringConfig("RESEND_API_KEY"),
-		OTP_TTL:            10 * time.Minute,
-		AccessTTL:          15 * time.Minute,
-		RefreshTTL:         14 * 24 * time.Hour,
-		JWTPrivateKey:      loadPrivateKey(requireStringConfig("JWT_PRIVATE_KEY_FILE")),
-		JWTPublicKey:       loadPublicKey(requireStringConfig("JWT_PUBLIC_KEY_FILE")),
-		JWTAlgorithm:       jwt.SigningMethodEdDSA,
+		Env:                    getStringConfig("ENV", "development"),
+		Port:                   getStringConfig("PORT", "8080"),
+		DSN:                    requireStringConfig("DATABASE_URL"),
+		PasswordPeppersRaw:     requireStringConfig("PASSWORD_PEPPERS"),
+		ActivePepperID:         requireStringConfig("ACTIVE_PEPPER_ID"),
+		SentryDSN:              requireStringConfig("SENTRY_DSN"),
+		SentrySampleRate:       parseFloatConfig("SENTRY_SAMPLE_RATE", "1"),
+		SentryFlushTimeout:     2 * time.Second,
+		RedisAddress:           requireStringConfig("REDIS_ADDR"),
+		RequestTimeout:         time.Duration(parseIntConfig("REQUEST_TIMEOUT_SECONDS", "10") * int64(time.Second)),
+		RateLimit:              rateLimit,
+		ResendAPIKey:           requireStringConfig("RESEND_API_KEY"),
+		EmailFromAddress:       getStringConfig("EMAIL_FROM_ADDRESS", "auth <no-reply@mail.auth.com>"),
+		AllowedOrigins:         parseListConfig("ALLOWED_ORIGINS", ""),
+		OTP_TTL:                10 * time.Minute,
+		AccessTTL:              15 * time.Minute,
+		RefreshTTL:             14 * 24 * time.Hour,
+		TemporaryTokenTTL:      30 * time.Minute,
+		LoginMaxFailedAttempts: int(parseIntConfig("LOGIN_MAX_FAILED_ATTEMPTS", "5")),
+		LoginLockDuration:      time.Duration(parseIntConfig("LOGIN_LOCK_DURATION_MINUTES", "15")) * time.Minute,
+		JWTPrivateKey:          loadPrivateKey(requireStringConfig("JWT_PRIVATE_KEY_FILE")),
+		JWTPublicKey:           loadPublicKey(requireStringConfig("JWT_PUBLIC_KEY_FILE")),
+		JWTAlgorithm:           jwt.SigningMethodEdDSA,
 	}
-	return nil
 }
 
 // Parses a float from env or fallback, fatals if invalid
@@ -106,6 +119,23 @@ func requireStringConfig(key string) string {
 		log.Fatalf("Missing env var: %s", key)
 	}
 	return v
+}
+
+// Parses a comma-separated list from env or fallback. Empty entries are dropped.
+func parseListConfig(key, fallback string) []string {
+	raw := getStringConfig(key, fallback)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func readKeyFile(filename string) (p *pem.Block, rest []byte) {
@@ -157,24 +187,3 @@ func loadPublicKey(filename string) ed25519.PublicKey {
 	log.Fatalf("private key is not of type ed25519.PublicKey")
 	return nil
 }
-
-/* TODO: Move to test file
-func validateResendAPIKey(client *resend.Client) error {
-	dummy := &resend.SendEmailRequest{
-		To:      []string{"no-reply@mail.auth.com"},
-		From:    "auth <no-reply@mail.auth.com>",
-		Subject: "Test",
-		Text:    "This is a test.",
-	}
-
-	_, err := client.Emails.Send(dummy)
-	if err != nil {
-		if strings.Contains(err.Error(), "email address is invalid") {
-			// Means the request hit the API and failed for a good reason
-			return nil
-		}
-		return fmt.Errorf("resend validation error: %w", err)
-	}
-	return nil
-}
-*/

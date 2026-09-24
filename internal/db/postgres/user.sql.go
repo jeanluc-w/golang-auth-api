@@ -49,6 +49,49 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateU
 	return i, err
 }
 
+const getUserByID = `-- name: GetUserByID :one
+SELECT id, username, username_display, role, status, deleted_at
+FROM users
+WHERE id = $1
+`
+
+type GetUserByIDRow struct {
+	ID              pgtype.UUID
+	Username        string
+	UsernameDisplay string
+	Role            UserRole
+	Status          NullUserStatus
+	DeletedAt       pgtype.Timestamptz
+}
+
+// Used by the refresh-token flow to re-derive current username/role/status
+// for the new access token, rather than trusting the (possibly stale,
+// already-expired) claims of the token being refreshed.
+func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (GetUserByIDRow, error) {
+	row := q.db.QueryRow(ctx, getUserByID, id)
+	var i GetUserByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.UsernameDisplay,
+		&i.Role,
+		&i.Status,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const touchUserLastLogin = `-- name: TouchUserLastLogin :exec
+UPDATE users
+SET last_login = now(), last_seen = now()
+WHERE id = $1
+`
+
+func (q *Queries) TouchUserLastLogin(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, touchUserLastLogin, id)
+	return err
+}
+
 const usernameExists = `-- name: UsernameExists :one
 SELECT EXISTS (
   SELECT 1

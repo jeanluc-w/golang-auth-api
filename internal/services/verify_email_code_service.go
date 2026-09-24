@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"auth-api/config"
 	"auth-api/internal/auth"
 	"auth-api/internal/utils"
 
@@ -17,6 +18,10 @@ type VerificationResult struct {
 	Token string
 }
 
+// VerifyEmailCode is step 2 of signup: checks the code from
+// StartEmailVerification (bounded attempts, then expiry), and on success
+// issues a short-lived "joiner" JWT and consumes the code so it can't be
+// reused.
 func VerifyEmailCode(ctx context.Context, redisClient *redis.Client, email string, code string) (*VerificationResult, *utils.ErrorDetail) {
 	// Validate that the email is valid
 	emailParsed := strings.ToLower(strings.TrimSpace(email))
@@ -65,7 +70,7 @@ func VerifyEmailCode(ctx context.Context, redisClient *redis.Client, email strin
 
 	// Attempt to generate a JWT for the user, return server error if it fails
 	utils.LogInfo(ctx, "Email verification successful", zap.String("email", emailParsed))
-	token, err := auth.GenerateTemporaryJWT(ctx, redisClient, emailParsed, 30*time.Minute)
+	token, err := auth.GenerateTemporaryJWT(ctx, redisClient, emailParsed, config.Loaded.TemporaryTokenTTL)
 	if err != nil {
 		utils.LogError(ctx, "Failed to generate temporary JWT", zap.Error(err))
 		return nil, &utils.Errors.InternalServerError

@@ -7,6 +7,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// InitLogger builds the process-wide zap logger: human-readable console
+// output at debug level in development, structured JSON at info level
+// otherwise.
 func InitLogger(env string) *zap.Logger {
 	// Common encoder config
 	encoderCfg := zapcore.EncoderConfig{

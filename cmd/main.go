@@ -8,7 +8,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/julienschmidt/httprouter"
 	"github.com/redis/go-redis/v9"
 	"github.com/resend/resend-go/v2"
 	"github.com/ulule/limiter/v3"
@@ -17,7 +16,6 @@ import (
 	"auth-api/config"
 	"auth-api/internal/handlers"
 	"auth-api/internal/server"
-	"auth-api/internal/utils"
 )
 
 func main() {
@@ -67,26 +65,8 @@ func main() {
 	// Establish 3rd Party services so handlers/services can use them
 	services := server.NewServices(pgPool, redisClient, resendClient, limiterInstance, logger)
 
-	// Define API routes with the services available
-	h := handlers.New(services)
-	router := httprouter.New()
-	// Health Check API
-	router.GET(server.V1_HealthCheck, h.HealthCheckHandler)
-	// Email Join APIs
-	router.POST(server.V1_StartEmailVerification, h.StartEmailVerificationHandler)
-	router.POST(server.V1_VerifyEmail, h.VerifyEmailCodeHandler)
-	router.POST(server.V1_CompleteEmailJoin, h.CompleteEmailJoinHandler)
-
-	// Handle httprouters default NotFound and MethodNotAllowed responses
-	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		utils.JSONError(w, utils.Errors.RouteNotFound)
-	})
-	router.MethodNotAllowed = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		utils.JSONError(w, utils.Errors.RouteNotFound)
-	})
-
-	// Wrap with middlewares
-	handler := handlers.BuildHandlerStack(router, services)
+	// Build the full application handler: routes + middleware stack
+	handler := handlers.NewHandler(services)
 
 	// Create server
 	srv := &http.Server{

@@ -30,8 +30,19 @@ func IsValidEmail(email string) bool {
 func IsValidUsername(username string) bool {
 	return usernameRegex.MatchString(username)
 }
+
+// Minimum and maximum accepted password length in bytes. The lower bound
+// gives reasonable entropy; the upper bound is defense-in-depth against
+// resource-exhaustion attacks (argon2 cost scales with input size) rather
+// than a meaningful security requirement — see NIST SP 800-63B, which
+// recommends accepting long passphrases.
+const (
+	minPasswordLen = 12
+	maxPasswordLen = 128
+)
+
 func IsValidPassword(password string) bool {
-	return len(password) >= 12
+	return len(password) >= minPasswordLen && len(password) <= maxPasswordLen
 }
 func IsValidVerificationCode(code string) bool {
 	return verificationCodeRegex.MatchString(code)

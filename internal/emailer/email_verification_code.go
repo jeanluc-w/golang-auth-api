@@ -3,6 +3,8 @@ package emailer
 import (
 	"fmt"
 
+	"auth-api/config"
+
 	"github.com/resend/resend-go/v2"
 )
 
@@ -14,12 +16,15 @@ func SendEmailVerificationEmail(code string, toEmail string, client *resend.Clie
 
 	emailFormat := &resend.SendEmailRequest{
 		To:      []string{toEmail},
-		From:    "auth <no-reply@mail.auth.com>",
+		From:    config.Loaded.EmailFromAddress,
 		Subject: "Verification Code",
 		Text:    fmt.Sprintf("Your auth verification code is: %s", code),
 		Html:    htmlBody,
 	}
 
 	sent, err := client.Emails.Send(emailFormat)
-	return sent.Id, err
+	if err != nil {
+		return "", err
+	}
+	return sent.Id, nil
 }

@@ -1,8 +1,8 @@
 package middleware
 
 import (
-	"context"
 	"auth-api/internal/entities"
+	"context"
 	"net/http"
 
 	"github.com/google/uuid"

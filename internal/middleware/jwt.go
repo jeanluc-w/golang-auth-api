@@ -1,18 +1,18 @@
 package middleware
 
 import (
-	"context"
 	"auth-api/internal/auth"
 	"auth-api/internal/entities"
 	"auth-api/internal/server"
 	"auth-api/internal/utils"
+	"context"
 	"net/http"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
+// isAlternateRoute reports whether path is in routes (exact match).
 func isAlternateRoute(path string, routes []string) bool {
 	for _, route := range routes {
 		if path == route {
@@ -22,7 +22,15 @@ func isAlternateRoute(path string, routes []string) bool {
 	return false
 }
 
-func JWTMiddleware(redisClient *redis.Client, db *pgxpool.Pool) func(http.Handler) http.Handler {
+// JWTMiddleware authenticates every request except those listed in
+// server.OpenRoutes, dispatching to one of three verification modes based
+// on the route:
+//   - server.V1_RefreshToken: parsed WITHOUT an expiration check, purely to
+//     identify the session (see auth.VerifyAndParseExpiredJWT).
+//   - server.TemporaryJWTRoutes: verified as a short-lived "joiner" token.
+//   - everything else: verified as a normal access token, with the
+//     resulting user attached to the request context.
+func JWTMiddleware(redisClient *redis.Client) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx := r.Context()
@@ -35,17 +43,21 @@ func JWTMiddleware(redisClient *redis.Client, db *pgxpool.Pool) func(http.Handle
 
 			// If not open, get the token and validate.
 			authHeader := r.Header.Get("Authorization")
-			utils.LogDebug(ctx, "ROUTES", zap.Any("routes", server.TemporaryJWTRoutes), zap.Any("path", requestPath))
 
-			// TODO: Implement different Auth check if it's the token refresh route since the token should be expired.
+			// The refresh-token route is special: the caller's access token
+			// is expected to already be expired (or close to it), so it's
+			// parsed without an expiration check purely to identify the
+			// session. The refresh service still independently authenticates
+			// the request via the refresh token itself.
 			if requestPath == server.V1_RefreshToken {
-				sessionId, err := auth.VerifyAndParseExpiredJWT(ctx, redisClient, db, authHeader)
+				sessionID, userID, err := auth.VerifyAndParseExpiredJWT(ctx, authHeader)
 				if err != nil {
-					utils.LogDebug(ctx, "Refresh Expired JWT validation failed", zap.Error(err))
+					utils.LogDebug(ctx, "Refresh token JWT validation failed", zap.Error(err))
 					utils.JSONError(w, utils.Errors.Unauthorized)
 					return
 				}
-				ctx = context.WithValue(ctx, entities.SessionIDFromExpiredJWTContextKey, sessionId)
+				ctx = context.WithValue(ctx, entities.SessionIDFromExpiredJWTContextKey, sessionID)
+				ctx = context.WithValue(ctx, entities.UserIDFromExpiredJWTContextKey, userID)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}

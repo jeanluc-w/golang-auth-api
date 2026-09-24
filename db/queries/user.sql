@@ -15,3 +15,16 @@ SELECT EXISTS (
   FROM users
   WHERE username = lower(sqlc.arg(username))
 ) AS exists;
+
+-- name: GetUserByID :one
+-- Used by the refresh-token flow to re-derive current username/role/status
+-- for the new access token, rather than trusting the (possibly stale,
+-- already-expired) claims of the token being refreshed.
+SELECT id, username, username_display, role, status, deleted_at
+FROM users
+WHERE id = sqlc.arg(id);
+
+-- name: TouchUserLastLogin :exec
+UPDATE users
+SET last_login = now(), last_seen = now()
+WHERE id = sqlc.arg(id);

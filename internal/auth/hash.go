@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
+
+	"auth-api/config"
 )
 
 func HashRefreshToken(tok string) string {
@@ -68,4 +71,32 @@ func NewStaticPepperManager(raw string, active string) (*StaticPepperManager, er
 		return nil, fmt.Errorf("active pepper id %q not present", active)
 	}
 	return &StaticPepperManager{activeID: active, peppers: peppers}, nil
+}
+
+var (
+	activePepperManagerOnce sync.Once
+	activePepperManagerVal  *StaticPepperManager
+	activePepperManagerErr  error
+)
+
+// ActivePepperManager parses PASSWORD_PEPPERS/ACTIVE_PEPPER_ID once (they
+// never change without a restart) and caches the result, instead of
+// re-parsing and re-decoding on every password hash/verify call. This
+// matters under load: without it, every login and signup request pays that
+// parsing cost on the hot path.
+func ActivePepperManager() (*StaticPepperManager, error) {
+	activePepperManagerOnce.Do(func() {
+		activePepperManagerVal, activePepperManagerErr = NewStaticPepperManager(config.Loaded.PasswordPeppersRaw, config.Loaded.ActivePepperID)
+	})
+	return activePepperManagerVal, activePepperManagerErr
+}
+
+// ShouldRehashActive reports whether phc should be rehashed under the
+// currently active pepper/params, using the cached pepper manager.
+func ShouldRehashActive(phc string) (bool, error) {
+	pm, err := ActivePepperManager()
+	if err != nil {
+		return false, err
+	}
+	return ShouldRehash(phc, pm), nil
 }

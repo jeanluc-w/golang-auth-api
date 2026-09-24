@@ -16,6 +16,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// Services bundles the shared infrastructure clients every handler and
+// service function needs, constructed once at startup in main.go.
 type Services struct {
 	DB           *pgxpool.Pool
 	RedisClient  *redis.Client
@@ -24,6 +26,7 @@ type Services struct {
 	Logger       *zap.Logger
 }
 
+// NewServices constructs a Services bundle from already-initialized clients.
 func NewServices(
 	db *pgxpool.Pool,
 	redis *redis.Client,

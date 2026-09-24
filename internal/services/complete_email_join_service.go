@@ -1,12 +1,12 @@
 package services
 
 import (
-	"context"
 	"auth-api/config"
 	"auth-api/internal/auth"
 	"auth-api/internal/db/postgres"
 	"auth-api/internal/entities"
 	"auth-api/internal/utils"
+	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -20,6 +20,10 @@ type EmailJoinResult struct {
 	Username     string
 }
 
+// CompleteEmailJoin is step 3 (final) of signup: given a verified email
+// (from the "joiner" JWT in ctx) plus a chosen username/password, it
+// creates the user + email auth identity and issues a normal access +
+// refresh token pair, just like Login would for an existing account.
 func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, username string, password string, confirmPassword string) (*EmailJoinResult, *utils.ErrorDetail) {
 	email := utils.GetContextString(ctx, entities.EmailFromTempJWTContextKey, "")
 	// Validate the email again just to make sure it's allowed just in case
@@ -99,8 +103,9 @@ func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis
 		UserAgent:        utils.UserAgentFromCtx(ctx),
 	})
 	if err != nil {
-		// Roll back Redis refresh key so we don't leave a dangling session
-		_ = redisClient.Del(ctx, "refresh:"+tokens.SessionID).Err()
+		// Roll back the Redis session so we don't leave a dangling session
+		// with no corresponding durable record.
+		_ = auth.DeleteSession(ctx, tokens.SessionID, redisClient)
 		utils.LogError(ctx, "CreateRefreshSession failed", zap.Error(err))
 		return nil, &utils.Errors.TokenGenerationFailed
 	}

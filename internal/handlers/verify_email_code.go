@@ -8,6 +8,9 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+// VerifyEmailCodeHandler checks the code sent by StartEmailVerificationHandler
+// (POST /auth/v1/verify-email) and, on success, returns a short-lived
+// "joiner" JWT that CompleteEmailJoinHandler requires to finish signup.
 func (h *Handlers) VerifyEmailCodeHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Processing VerifyEmailCodeHandler flow")

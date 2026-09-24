@@ -12,4 +12,5 @@ const (
 	ClientIPContextKey                ContextKey = "client_ip"
 	UserAgentContextKey               ContextKey = "user_agent"
 	SessionIDFromExpiredJWTContextKey ContextKey = "session_id_from_expired_jwt"
+	UserIDFromExpiredJWTContextKey    ContextKey = "user_id_from_expired_jwt"
 )

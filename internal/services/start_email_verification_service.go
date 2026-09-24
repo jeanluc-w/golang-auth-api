@@ -1,12 +1,12 @@
 package services
 
 import (
-	"context"
 	"auth-api/config"
 	"auth-api/internal/auth"
 	"auth-api/internal/emailer"
 	"auth-api/internal/entities"
 	"auth-api/internal/utils"
+	"context"
 	"strings"
 	"time"
 
@@ -16,6 +16,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// StartEmailVerification is step 1 of signup: validates the email isn't
+// already registered, generates a 6-digit code, stores it in Redis, and
+// emails it via Resend. Rate-limited to one regeneration per minute per
+// email to slow down abuse of the email-sending path.
 func StartEmailVerification(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, resendClient *resend.Client, email string) *utils.ErrorDetail {
 	// Validate that the email is valid
 	emailParsed := strings.ToLower(strings.TrimSpace(email))

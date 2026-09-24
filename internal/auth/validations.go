@@ -1,8 +1,8 @@
 package auth
 
 import (
-	"context"
 	"auth-api/internal/db/postgres"
+	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

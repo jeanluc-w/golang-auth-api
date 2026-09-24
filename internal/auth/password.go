@@ -1,10 +1,9 @@
 package auth
 
 import (
+	"auth-api/internal/utils"
 	"crypto/rand"
 	"crypto/subtle"
-	"auth-api/config"
-	"auth-api/internal/utils"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -33,7 +32,7 @@ func randomSalt(n int) ([]byte, error) {
 // Hashes the password with the ACTIVE pepper and returns a PHC string like:
 // $argon2id$v=19$m=65536,t=1,p=4,pepper=id2$<salt_b64>$<key_b64>
 func HashPasswordPHC(password string) (string, error) {
-	pm, err := NewStaticPepperManager(config.Loaded.PasswordPeppersRaw, config.Loaded.ActivePepperID)
+	pm, err := ActivePepperManager()
 	if err != nil {
 		return "", err
 	}
@@ -68,7 +67,7 @@ func HashPasswordPHC(password string) (string, error) {
 // Verifies a password against a PHC string. It extracts pepper id from params.
 // If the exact pepper isn't found, it can optionally try all peppers (migration mode).
 func VerifyPasswordPHC(password, phc string, tryAllIfMissing bool) (bool, error) {
-	pm, err := NewStaticPepperManager(config.Loaded.PasswordPeppersRaw, config.Loaded.ActivePepperID)
+	pm, err := ActivePepperManager()
 	if err != nil {
 		return false, errors.New("could not create pepper manager")
 	}
@@ -127,6 +126,23 @@ func VerifyPasswordPHC(password, phc string, tryAllIfMissing bool) (bool, error)
 	}
 
 	return false, nil
+}
+
+// dummyPHC is a fixed, valid-format PHC hash with no corresponding real
+// account. VerifyDummyPassword hashes the caller's input against it so that
+// a login attempt against a nonexistent email costs roughly the same CPU
+// time as one against a real (but wrong-password) account, reducing the
+// timing signal an attacker could use to enumerate registered emails.
+const dummyPHC = "$argon2id$v=19$m=131072,t=2,p=4,pepper=dummy$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
+// VerifyDummyPassword always returns false; it exists purely for its side
+// effect of burning comparable CPU time to a real VerifyPasswordPHC call.
+func VerifyDummyPassword(password string) {
+	parts := strings.Split(dummyPHC, "$")
+	salt, _ := base64.RawStdEncoding.DecodeString(parts[4])
+	want, _ := base64.RawStdEncoding.DecodeString(parts[5])
+	got := argon2.IDKey([]byte(password+"dummy-pepper-value"), salt, argonTime, argonMemory, argonThreads, uint32(len(want)))
+	subtle.ConstantTimeCompare(got, want)
 }
 
 // Returns true if hash is using a non-active pepper or old params.

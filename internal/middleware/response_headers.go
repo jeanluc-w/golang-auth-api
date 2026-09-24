@@ -2,17 +2,27 @@ package middleware
 
 import (
 	"auth-api/config"
+	"auth-api/internal/utils"
 	"net/http"
 )
 
+// ResponseHeadersMiddleware sets CORS and security headers on every response.
+//
+// CORS origins are configured via the ALLOWED_ORIGINS env var (comma-separated).
+// In development with no origins configured, any origin is allowed for ease of
+// local testing; in every other case an unlisted Origin simply gets no
+// Access-Control-Allow-Origin header, which browsers treat as a same-origin-only
+// (i.e. cross-origin blocked) response.
 func ResponseHeadersMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORS headers
-		if config.Loaded.Env == "development" {
+		origin := r.Header.Get("Origin")
+		switch {
+		case config.Loaded.Env == "development" && len(config.Loaded.AllowedOrigins) == 0:
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-		} else {
-			// Strict in production
-			w.Header().Set("Access-Control-Allow-Origin", "https://auth.com")
+		case origin != "" && utils.IsOriginAllowed(origin, config.Loaded.AllowedOrigins):
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")

@@ -11,10 +11,13 @@ type ErrorDetail struct {
 
 // Error registry: centralized place for all error definitions.
 var Errors = struct {
+	AccountLocked         ErrorDetail
+	AccountNotUsable      ErrorDetail
 	CodeExpired           ErrorDetail
 	EmailIsTaken          ErrorDetail
 	IncorrectCode         ErrorDetail
 	InternalServerError   ErrorDetail
+	InvalidCredentials    ErrorDetail
 	InvalidEmailFormat    ErrorDetail
 	InvalidPasswordFormat ErrorDetail
 	InvalidPayload        ErrorDetail
@@ -29,10 +32,13 @@ var Errors = struct {
 	UsernameTaken         ErrorDetail
 	TokenGenerationFailed ErrorDetail
 }{
+	AccountLocked:         ErrorDetail{"account_locked", "Account temporarily locked due to too many failed login attempts", http.StatusLocked},  // 423
+	AccountNotUsable:      ErrorDetail{"account_not_usable", "This account cannot currently sign in", http.StatusForbidden},                      // 403
 	CodeExpired:           ErrorDetail{"code_expired", "Verification code has expired", http.StatusUnauthorized},                                 // 401
 	EmailIsTaken:          ErrorDetail{"email_is_taken", "Email is already taken", http.StatusConflict},                                          // 409
 	IncorrectCode:         ErrorDetail{"invalid_code", "Invalid verification code", http.StatusUnauthorized},                                     // 401
 	InternalServerError:   ErrorDetail{"internal_server_error", "Something went wrong", http.StatusInternalServerError},                          // 500
+	InvalidCredentials:    ErrorDetail{"invalid_credentials", "Invalid email or password", http.StatusUnauthorized},                              // 401
 	InvalidEmailFormat:    ErrorDetail{"invalid_email_format", "Invalid email submitted", http.StatusBadRequest},                                 // 400
 	InvalidPasswordFormat: ErrorDetail{"invalid_password_format", "Invalid password length", http.StatusBadRequest},                              // 400
 	InvalidPayload:        ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusBadRequest},                                      // 400
@@ -40,7 +46,7 @@ var Errors = struct {
 	InvalidPayloadMedia:   ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusUnsupportedMediaType},                            // 415
 	InvalidUsernameFormat: ErrorDetail{"invalid_username_format", "Invalid username submitted", http.StatusBadRequest},                           // 400
 	RouteNotFound:         ErrorDetail{"route_not_found", "Requested route not found", http.StatusNotFound},                                      // 404
-	SessionExpired:        ErrorDetail{"session_expired", "Refresh token is invalid or expired", http.StatusTeapot},                              // 418
+	SessionExpired:        ErrorDetail{"session_expired", "Refresh token is invalid or expired", http.StatusUnauthorized},                        // 401
 	TooManyAttempts:       ErrorDetail{"too_many_attempts", "Too many failed attempts", http.StatusTooManyRequests},                              // 429
 	TooSoonToRequest:      ErrorDetail{"too_soon_to_request", "Please wait before requesting another code", http.StatusTooManyRequests},          // 429
 	Unauthorized:          ErrorDetail{"unauthorized", "Unauthorized access", http.StatusUnauthorized},                                           // 401

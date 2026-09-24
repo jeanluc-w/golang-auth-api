@@ -20,6 +20,11 @@ func safe[T any](v *T, get func(*T) string) string {
 	return get(v)
 }
 
+// LoggerMiddleware attaches a request-scoped logger (with request id, user,
+// and session fields pre-populated) to the context, updates the Sentry
+// scope for the request, and logs a start/completion pair with duration.
+// It also recovers panics from downstream handlers so a single bad request
+// can't take the whole server down.
 func LoggerMiddleware(logger *zap.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"context"
 	"auth-api/internal/entities"
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -83,6 +83,6 @@ func LogPanic(ctx context.Context, msg string, fields ...zap.Field) {
 func LogFatal(ctx context.Context, msg string, fields ...zap.Field) {
 	logger := getLogger(ctx)
 	if logger != nil {
-		logger.Info(msg, fields...)
+		logger.Fatal(msg, fields...)
 	}
 }

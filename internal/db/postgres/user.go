@@ -1,8 +1,8 @@
 package postgres
 
 import (
-	"context"
 	"auth-api/internal/utils"
+	"context"
 	"errors"
 
 	"github.com/jackc/pgx/v5/pgtype"

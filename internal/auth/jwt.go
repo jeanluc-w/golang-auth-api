@@ -3,21 +3,28 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"auth-api/config"
-	"auth-api/internal/entities"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"auth-api/config"
+	"auth-api/internal/entities"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
 
-// Pair returned to callers
+const (
+	jwtIssuer   = "auth-api"
+	jwtAudience = "auth-app"
+)
+
+// TokenPair is the pair of tokens returned to callers after a successful
+// login, signup, or refresh: a short-lived signed JWT access token and an
+// opaque, long-lived refresh token (only its hash is ever persisted).
 type TokenPair struct {
 	AccessToken  string
 	RefreshToken string
@@ -26,23 +33,24 @@ type TokenPair struct {
 	RefreshExp   time.Time
 }
 
-// Issues an access JWT + opaque refresh token (hashed in Redis).
+// GenerateUserTokens issues a new access JWT + opaque refresh token for a
+// fully authenticated user, and records the access session in Redis.
+// It does NOT persist the refresh token anywhere other than Redis — callers
+// are responsible for also durably storing its hash (see postgres.CreateRefreshSession)
+// so it survives a Redis flush/restart.
 func GenerateUserTokens(
 	ctx context.Context,
 	redisClient *redis.Client,
 	userID, username, role string,
 	accessTTL, refreshTTL time.Duration,
 ) (*TokenPair, error) {
-	// Create session id
 	sessionID := uuid.NewString()
 
-	// Access token and session in Redis
 	access, accessExp, err := generateAccessJWT(ctx, redisClient, sessionID, userID, username, role, accessTTL)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3) Refresh token , hash & persist in Redis
 	refresh, refreshExp, err := generateAndStoreRefresh(ctx, redisClient, sessionID, refreshTTL)
 	if err != nil {
 		return nil, err
@@ -57,8 +65,40 @@ func GenerateUserTokens(
 	}, nil
 }
 
-// Generate an authentication JWT token with our custom claims for normal users
-// and store the session in Redis
+// RotateSessionTokens issues a new access JWT and a new opaque refresh
+// token for an EXISTING session ID, overwriting that session's Redis
+// entries in place. Unlike GenerateUserTokens (which always mints a brand
+// new session), this is used by the refresh-token flow to rotate an
+// already-authenticated session's tokens without changing its identity —
+// the session ID is what both Postgres and Redis key the session on.
+func RotateSessionTokens(
+	ctx context.Context,
+	redisClient *redis.Client,
+	sessionID, userID, username, role string,
+	accessTTL, refreshTTL time.Duration,
+) (*TokenPair, error) {
+	access, accessExp, err := generateAccessJWT(ctx, redisClient, sessionID, userID, username, role, accessTTL)
+	if err != nil {
+		return nil, err
+	}
+
+	refresh, refreshExp, err := generateAndStoreRefresh(ctx, redisClient, sessionID, refreshTTL)
+	if err != nil {
+		return nil, err
+	}
+
+	return &TokenPair{
+		AccessToken:  access,
+		RefreshToken: refresh,
+		SessionID:    sessionID,
+		AccessExp:    accessExp,
+		RefreshExp:   refreshExp,
+	}, nil
+}
+
+// generateAccessJWT signs a new access JWT for the given session and
+// records the session's existence in Redis so it can be revoked/checked
+// independently of the JWT's own expiration.
 func generateAccessJWT(
 	ctx context.Context,
 	redisClient *redis.Client,
@@ -74,8 +114,8 @@ func generateAccessJWT(
 		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   userID,
-			Issuer:    "auth-api",
-			Audience:  jwt.ClaimStrings{"auth-app"},
+			Issuer:    jwtIssuer,
+			Audience:  jwt.ClaimStrings{jwtAudience},
 			ID:        sessionID,
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -83,7 +123,6 @@ func generateAccessJWT(
 		},
 	}
 
-	// Store short-lived access session in Redis by sessionId
 	if err := GenerateSession(ctx, sessionID, exp, redisClient); err != nil {
 		return "", time.Time{}, fmt.Errorf("failed to create access session in redis: %w", err)
 	}
@@ -96,7 +135,8 @@ func generateAccessJWT(
 	return signed, exp, nil
 }
 
-// Generate the refresh token and store its hash in Redis
+// generateAndStoreRefresh creates a new opaque refresh token and stores only
+// its hash in Redis, keyed by session ID.
 func generateAndStoreRefresh(
 	ctx context.Context,
 	redisClient *redis.Client,
@@ -113,7 +153,6 @@ func generateAndStoreRefresh(
 	hash := HashRefreshToken(raw)
 	exp := time.Now().Add(ttl)
 
-	// Store the refresh token in the redis for easy access
 	key := "refresh:" + sessionID
 	if err := redisClient.Set(ctx, key, hash, time.Until(exp)).Err(); err != nil {
 		return "", time.Time{}, fmt.Errorf("failed to set refresh in redis: %w", err)
@@ -122,7 +161,7 @@ func generateAndStoreRefresh(
 	return raw, exp, nil
 }
 
-// Returns base64url-encoded random bytes of length n
+// randomToken returns base64url-encoded random bytes of length n.
 func randomToken(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
@@ -131,18 +170,20 @@ func randomToken(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// Generate a temporary JWT token with our custom claims
+// GenerateTemporaryJWT issues a short-lived, restricted-scope JWT used
+// between email verification and signup completion. Its role is always
+// "joiner" so it can never be mistaken for (or misused as) a normal access
+// token by VerifyAndParseJWT.
 func GenerateTemporaryJWT(ctx context.Context, redisClient *redis.Client, email string, ttl time.Duration) (string, error) {
-	// Generate the token
 	sessionID := uuid.NewString()
 	now := time.Now()
 	exp := now.Add(ttl)
 	claims := entities.JWTClaims{
-		Role: "joiner",
+		Role: entities.RoleJoiner,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   email,
-			Issuer:    "auth-api",
-			Audience:  jwt.ClaimStrings{"auth-app"},
+			Issuer:    jwtIssuer,
+			Audience:  jwt.ClaimStrings{jwtAudience},
 			ID:        sessionID,
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -150,133 +191,153 @@ func GenerateTemporaryJWT(ctx context.Context, redisClient *redis.Client, email 
 		},
 	}
 
-	// Create session in redis
 	if err := GenerateTemporarySession(ctx, sessionID, exp, redisClient); err != nil {
 		return "", fmt.Errorf("failed to create session in redis: %w", err)
 	}
 
-	// Sign and return the JWT
 	token := jwt.NewWithClaims(config.Loaded.JWTAlgorithm, claims)
 	return token.SignedString(config.Loaded.JWTPrivateKey)
 }
 
-// Parse the JWT token from the Authorization header
-// Returns the JWTClaims if successful, or an error if parsing fails
-func parseJWT(authHeader string) (*entities.JWTClaims, error) {
-	// Check if the Authorization header is present and formatted correctly
+// keyFunc resolves the public key used to verify a token's signature,
+// rejecting anything signed with an algorithm other than the one this
+// service issues tokens with (defends against alg-confusion attacks).
+func keyFunc(t *jwt.Token) (interface{}, error) {
+	if t.Method != config.Loaded.JWTAlgorithm {
+		return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+	}
+	return config.Loaded.JWTPublicKey, nil
+}
+
+// parseJWT parses and verifies the JWT in a Bearer Authorization header.
+//
+// When allowExpired is false (the normal case), the signature, issuer,
+// audience, and all standard time-based claims (exp/nbf/iat) are validated
+// by the JWT library and an expired or malformed token is rejected outright.
+//
+// When allowExpired is true, expiration is intentionally NOT enforced here
+// (only the refresh-token flow uses this, to identify which session an
+// already-expired access token belonged to); the caller MUST independently
+// authenticate the request via the accompanying refresh token before
+// trusting the returned claims for anything. Signature, issuer, and
+// audience are still enforced in both modes.
+func parseJWT(authHeader string, allowExpired bool) (*entities.JWTClaims, error) {
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return nil, errors.New("missing or malformed Authorization header")
 	}
 	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
-	// Parse the token with our custom claims
-	token, err := jwt.ParseWithClaims(tokenStr, &entities.JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
-		if t.Method != config.Loaded.JWTAlgorithm {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+	if !allowExpired {
+		token, err := jwt.ParseWithClaims(tokenStr, &entities.JWTClaims{}, keyFunc,
+			jwt.WithIssuer(jwtIssuer),
+			jwt.WithAudience(jwtAudience),
+			jwt.WithExpirationRequired(),
+		)
+		if err != nil || !token.Valid {
+			return nil, errors.New("invalid token")
 		}
-		return config.Loaded.JWTPublicKey, nil
-	})
-
-	// Check if the token parsed successfully
-	if err != nil || !token.Valid {
-		return nil, errors.New("invalid token")
+		claims, ok := token.Claims.(*entities.JWTClaims)
+		if !ok {
+			return nil, errors.New("invalid claims")
+		}
+		return claims, nil
 	}
 
-	// Extract the claims from the token
+	// Expired-allowed path: skip automatic claim validation (it would reject
+	// the expired token before we ever see it) but still verify the
+	// signature, then manually re-check everything except expiration.
+	token, err := jwt.ParseWithClaims(tokenStr, &entities.JWTClaims{}, keyFunc, jwt.WithoutClaimsValidation())
+	if err != nil {
+		return nil, errors.New("invalid token")
+	}
 	claims, ok := token.Claims.(*entities.JWTClaims)
 	if !ok {
 		return nil, errors.New("invalid claims")
 	}
-
-	// Validate the audience claim
-	audValid := false
-	for _, aud := range claims.RegisteredClaims.Audience {
-		if aud == "auth-app" {
-			audValid = true
-			break
-		}
-	}
-	if !audValid {
-		return nil, errors.New("invalid audience")
-	}
-
-	// Validate the Issuer claim
-	if claims.RegisteredClaims.Issuer != "auth-api" {
+	if claims.Issuer != jwtIssuer {
 		return nil, errors.New("invalid issuer")
 	}
-
-	// Check expiration time on it
-	if claims.ExpiresAt == nil || time.Now().After(claims.ExpiresAt.Time) {
-		return nil, errors.New("token expired")
+	if !hasAudience(claims, jwtAudience) {
+		return nil, errors.New("invalid audience")
 	}
-
+	if claims.ExpiresAt == nil {
+		return nil, errors.New("missing expiration claim")
+	}
+	if claims.NotBefore != nil && time.Now().Before(claims.NotBefore.Time) {
+		return nil, errors.New("token not yet valid")
+	}
 	return claims, nil
 }
 
-// Verify the JWT token and return the User data structure when succesful
+func hasAudience(claims *entities.JWTClaims, want string) bool {
+	for _, aud := range claims.Audience {
+		if aud == want {
+			return true
+		}
+	}
+	return false
+}
+
+// VerifyAndParseJWT verifies a normal (non-expired, non-temporary) access
+// JWT and checks its session is still active in Redis, returning the
+// authenticated user on success.
 func VerifyAndParseJWT(ctx context.Context, redisClient *redis.Client, authHeader string) (*entities.UserContext, error) {
-	// Extract the claims from the token
-	claims, err := parseJWT(authHeader)
+	claims, err := parseJWT(authHeader, false)
 	if err != nil {
 		return nil, err
 	}
 
-	// Validate the custom user claims
-	if claims.UserID == "" || claims.ID == "" || claims.Role == "joiner" {
+	if claims.UserID == "" || claims.ID == "" || claims.Role == entities.RoleJoiner {
 		return nil, errors.New("invalid claims")
 	}
 
-	// Check Redis-backed session validity
 	if !IsValidSession(ctx, claims.ID, claims.ExpiresAt.Time, redisClient) {
 		return nil, errors.New("session expired or invalid")
 	}
 
-	user := &entities.UserContext{
+	return &entities.UserContext{
 		ID:        claims.UserID,
 		Username:  claims.Username,
 		Role:      claims.Role,
 		SessionID: claims.ID,
-	}
-	return user, nil
+	}, nil
 }
 
+// VerifyAndParseTemporaryJWT verifies a temporary ("joiner") JWT issued
+// after email verification, returning the verified email and token ID.
 func VerifyAndParseTemporaryJWT(ctx context.Context, redisClient *redis.Client, authHeader string) (email string, id string, err error) {
-	// Extract the claims from the token
-	claims, err := parseJWT(authHeader)
+	claims, err := parseJWT(authHeader, false)
 	if err != nil {
 		return "", "", err
 	}
 
-	// Check if the claims are valid
-	if claims.Subject == "" || claims.ID == "" || claims.Role != "joiner" {
+	if claims.Subject == "" || claims.ID == "" || claims.Role != entities.RoleJoiner {
 		return "", "", errors.New("invalid claims")
 	}
 
-	// Check if the session is valid (i.e. in the Redis)
 	if !IsValidTemporarySession(ctx, claims.ID, claims.ExpiresAt.Time, redisClient) {
 		return "", "", errors.New("session is expired or invalid")
 	}
 
-	// Return the email from the Subject claim
 	return claims.Subject, claims.ID, nil
 }
 
-func VerifyAndParseExpiredJWT(ctx context.Context, redisClient *redis.Client, db *pgxpool.Pool, authHeader string) (string, error) {
-	// Extract the claims from the token
-	claims, err := parseJWT(authHeader)
-
-	// If the error isn't token expired, forward the error.
-	// If the error was empty, return an error that the token isn't expired
-	if err != errors.New("token expired") {
-		return "", err
-	} else if err == nil {
-		return "", errors.New("token is valid and not expired")
+// VerifyAndParseExpiredJWT is used only by the refresh-token endpoint. It
+// verifies the signature/issuer/audience of the caller's most recent access
+// JWT without regard to its expiration, and returns the session and user ID
+// embedded in it. This identifies which session a refresh request is for;
+// it does NOT authenticate the request by itself — the refresh service must
+// still validate the accompanying refresh token against the stored hash
+// before honoring the request.
+func VerifyAndParseExpiredJWT(ctx context.Context, authHeader string) (sessionID string, userID string, err error) {
+	claims, err := parseJWT(authHeader, true)
+	if err != nil {
+		return "", "", err
 	}
 
-	// Check if the claims are valid
-	if claims.UserID == "" || claims.ID == "" || claims.Role == "joiner" {
-		return "", errors.New("invalid claims")
+	if claims.UserID == "" || claims.ID == "" || claims.Role == entities.RoleJoiner {
+		return "", "", errors.New("invalid claims")
 	}
 
-	return claims.ID, nil
+	return claims.ID, claims.UserID, nil
 }

@@ -8,6 +8,9 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+// StartEmailVerificationHandler begins signup: it emails a 6-digit code to
+// the given address (POST /auth/v1/start-email-verification). It's an open
+// route — no auth required — since the caller doesn't have an account yet.
 func (h *Handlers) StartEmailVerificationHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Processing StartEmailVerificationHandler flow")

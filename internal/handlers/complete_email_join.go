@@ -9,6 +9,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// CompleteEmailJoinHandler finishes signup (POST /auth/v1/complete-email-join):
+// given a username/password and the "joiner" JWT from VerifyEmailCodeHandler
+// (required in the Authorization header), it creates the account and
+// returns a normal access + refresh token pair.
 func (h *Handlers) CompleteEmailJoinHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Starting CompleteEmailJoinHandler")

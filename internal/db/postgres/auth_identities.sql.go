@@ -32,6 +32,73 @@ func (q *Queries) CreateEmailAuth(ctx context.Context, arg CreateEmailAuthParams
 	return err
 }
 
+const getEmailAuthByEmail = `-- name: GetEmailAuthByEmail :one
+SELECT
+  u.id AS user_id,
+  u.username,
+  u.username_display,
+  u.role,
+  u.status,
+  u.deleted_at,
+  ai.id AS identity_id,
+  ai.password_hash,
+  ai.failed_attempts,
+  ai.locked_at
+FROM auth_identities ai
+JOIN users u ON u.id = ai.user_id
+WHERE ai.provider = 'email' AND ai.provider_user_id = lower($1)
+`
+
+type GetEmailAuthByEmailRow struct {
+	UserID          pgtype.UUID
+	Username        string
+	UsernameDisplay string
+	Role            UserRole
+	Status          NullUserStatus
+	DeletedAt       pgtype.Timestamptz
+	IdentityID      pgtype.UUID
+	PasswordHash    pgtype.Text
+	FailedAttempts  pgtype.Int4
+	LockedAt        pgtype.Timestamptz
+}
+
+// Looks up a user's email auth identity by their login email. Used only by
+// the login flow; a missing row must be treated identically (timing- and
+// response-wise) to a wrong password by the caller, to avoid leaking which
+// emails have accounts.
+func (q *Queries) GetEmailAuthByEmail(ctx context.Context, email string) (GetEmailAuthByEmailRow, error) {
+	row := q.db.QueryRow(ctx, getEmailAuthByEmail, email)
+	var i GetEmailAuthByEmailRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.UsernameDisplay,
+		&i.Role,
+		&i.Status,
+		&i.DeletedAt,
+		&i.IdentityID,
+		&i.PasswordHash,
+		&i.FailedAttempts,
+		&i.LockedAt,
+	)
+	return i, err
+}
+
+const incrementFailedLoginAttempts = `-- name: IncrementFailedLoginAttempts :one
+UPDATE auth_identities
+SET failed_attempts = failed_attempts + 1,
+    last_failed_at = now()
+WHERE id = $1
+RETURNING failed_attempts
+`
+
+func (q *Queries) IncrementFailedLoginAttempts(ctx context.Context, id pgtype.UUID) (pgtype.Int4, error) {
+	row := q.db.QueryRow(ctx, incrementFailedLoginAttempts, id)
+	var failed_attempts pgtype.Int4
+	err := row.Scan(&failed_attempts)
+	return failed_attempts, err
+}
+
 const isEmailRegistered = `-- name: IsEmailRegistered :one
 SELECT EXISTS (
   SELECT 1
@@ -45,4 +112,47 @@ func (q *Queries) IsEmailRegistered(ctx context.Context, email string) (bool, er
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const lockAuthIdentity = `-- name: LockAuthIdentity :exec
+UPDATE auth_identities
+SET locked_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) LockAuthIdentity(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, lockAuthIdentity, id)
+	return err
+}
+
+const resetFailedLoginAttempts = `-- name: ResetFailedLoginAttempts :exec
+UPDATE auth_identities
+SET failed_attempts = 0,
+    locked_at = NULL,
+    last_login = now()
+WHERE id = $1
+`
+
+// Clears lockout state after a successful login.
+func (q *Queries) ResetFailedLoginAttempts(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, resetFailedLoginAttempts, id)
+	return err
+}
+
+const updatePasswordHash = `-- name: UpdatePasswordHash :exec
+UPDATE auth_identities
+SET password_hash = $1
+WHERE id = $2
+`
+
+type UpdatePasswordHashParams struct {
+	PasswordHash pgtype.Text
+	ID           pgtype.UUID
+}
+
+// Used to transparently rehash a password on successful login when it was
+// hashed with retired parameters or a rotated-out pepper.
+func (q *Queries) UpdatePasswordHash(ctx context.Context, arg UpdatePasswordHashParams) error {
+	_, err := q.db.Exec(ctx, updatePasswordHash, arg.PasswordHash, arg.ID)
+	return err
 }
