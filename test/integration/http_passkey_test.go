@@ -72,9 +72,12 @@ func TestHTTP_Passkey_RegisterBegin_ReturnsCreationOptions(t *testing.T) {
 	if resp.Status != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", resp.Status, resp.Raw)
 	}
-	respField, ok := resp.Body["response"].(map[string]any)
+	// protocol.CredentialCreation serializes under "publicKey", matching the
+	// shape navigator.credentials.create({publicKey: ...}) expects directly
+	// — not this API's usual response envelope (see the file's doc comment).
+	respField, ok := resp.Body["publicKey"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected a 'response' object in the creation options: %s", resp.Raw)
+		t.Fatalf("expected a 'publicKey' object in the creation options: %s", resp.Raw)
 	}
 	if respField["challenge"] == nil || respField["challenge"] == "" {
 		t.Errorf("expected a non-empty challenge: %s", resp.Raw)
