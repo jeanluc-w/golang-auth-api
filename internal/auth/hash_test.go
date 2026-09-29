@@ -179,6 +179,16 @@ func TestVerifyPasswordPHC_TryAllIfMissing(t *testing.T) {
 	}
 }
 
+// TestVerifyDummyPassword_ConstantTime doesn't (and can't reliably) assert
+// on timing directly; it locks in that VerifyDummyPassword runs to
+// completion without panicking regardless of input, since a real login
+// handler calls it unconditionally on every unknown-email attempt.
+func TestVerifyDummyPassword_ConstantTime(t *testing.T) {
+	for _, password := range []string{"", "short", "a very long password indeed, much longer than usual"} {
+		VerifyDummyPassword(password)
+	}
+}
+
 func TestShouldRehash(t *testing.T) {
 	pm, err := NewStaticPepperManager("active:"+testPepper(1), "active")
 	if err != nil {

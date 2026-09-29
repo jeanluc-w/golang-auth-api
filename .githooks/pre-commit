@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Mandatory pre-commit checks: gofmt, go vet, go mod tidy, and unit tests for
+# both Go modules in this repo (main module + test/integration).
+#
+# This is opt-in per clone — a client-side hook can't be forced on anyone by
+# the repo itself, and it can always be bypassed with `git commit --no-verify`.
+# The real, unbypassable gate is the CI workflow (.github/workflows/ci.yml),
+# which runs the same checks (plus the Docker-backed integration tests) as a
+# required PR status check. This hook exists to catch the same problems
+# locally, before you push, so you're not waiting on CI to find them.
+#
+# Install with: make hooks   (or: git config core.hooksPath .githooks)
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+fail=0
+
+echo "==> gofmt (all modules)"
+unformatted="$(gofmt -l . 2>&1)"
+if [ -n "$unformatted" ]; then
+	echo "The following files need 'gofmt -w':"
+	echo "$unformatted"
+	fail=1
+fi
+
+# check_module runs vet + tidy + test for the Go module rooted at $1.
+check_module() {
+	local dir="$1"
+
+	echo "==> [$dir] go vet"
+	if ! (cd "$dir" && go vet ./...); then
+		fail=1
+	fi
+
+	echo "==> [$dir] go mod tidy"
+	(cd "$dir" && go mod tidy)
+	if ! git diff --quiet -- "$dir/go.mod" "$dir/go.sum"; then
+		echo "$dir/go.mod or $dir/go.sum changed after 'go mod tidy' — stage the result and commit again."
+		fail=1
+	fi
+
+	echo "==> [$dir] go test"
+	if ! (cd "$dir" && go test ./...); then
+		fail=1
+	fi
+}
+
+check_module .
+
+# The integration suite spins up real Postgres/Redis containers via
+# testcontainers-go, which needs a running Docker daemon and takes several
+# seconds — too slow to force on every commit. Run it automatically when
+# Docker is available (so it's still "mandatory" whenever it can be), skip
+# with a clear warning otherwise. Force either way with:
+#   SKIP_INTEGRATION_TESTS=1 git commit ...
+#   RUN_INTEGRATION_TESTS=1 git commit ...   (fail instead of skip if Docker is down)
+if [ "${SKIP_INTEGRATION_TESTS:-0}" = "1" ]; then
+	echo "==> [test/integration] skipped (SKIP_INTEGRATION_TESTS=1)"
+elif docker info >/dev/null 2>&1; then
+	check_module test/integration
+elif [ "${RUN_INTEGRATION_TESTS:-0}" = "1" ]; then
+	echo "RUN_INTEGRATION_TESTS=1 was set but Docker isn't reachable."
+	fail=1
+else
+	echo "==> [test/integration] skipped (Docker not detected; this always runs in CI)"
+fi
+
+if [ "$fail" -ne 0 ]; then
+	echo
+	echo "pre-commit checks failed; commit aborted. Fix the above, or bypass with --no-verify if you really need to."
+	exit 1
+fi
+
+exit 0

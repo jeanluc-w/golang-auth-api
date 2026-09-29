@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"auth-api/internal/utils"
@@ -15,7 +16,7 @@ import (
 // this gates authentication, but are logged so a Redis outage shows up as
 // errors rather than a silent wave of "unauthorized" responses.
 func IsValidSession(ctx context.Context, sessionID string, exp time.Time, rdb *redis.Client) bool {
-	if time.Now().After(exp) {
+	if time.Now().After(exp) || rdb == nil {
 		return false
 	}
 	exists, err := rdb.Exists(ctx, "session:"+sessionID).Result()
@@ -30,7 +31,7 @@ func IsValidSession(ctx context.Context, sessionID string, exp time.Time, rdb *r
 // token session based on the passed ID and expiration. See IsValidSession
 // for the fail-closed error handling rationale.
 func IsValidTemporarySession(ctx context.Context, sessionID string, exp time.Time, rdb *redis.Client) bool {
-	if time.Now().After(exp) {
+	if time.Now().After(exp) || rdb == nil {
 		return false
 	}
 	exists, err := rdb.Exists(ctx, "temporary_session:"+sessionID).Result()
@@ -43,6 +44,9 @@ func IsValidTemporarySession(ctx context.Context, sessionID string, exp time.Tim
 
 // GenerateSession creates a new session in Redis with the given session ID and expiration time.
 func GenerateSession(ctx context.Context, sessionID string, exp time.Time, rdb *redis.Client) error {
+	if rdb == nil {
+		return errors.New("redis client is nil")
+	}
 	ttl := time.Until(exp)
 	if ttl <= 0 {
 		return nil // do not set already-expired sessions
@@ -52,6 +56,9 @@ func GenerateSession(ctx context.Context, sessionID string, exp time.Time, rdb *
 
 // GenerateSession creates a new session in Redis with the given session ID and expiration time.
 func GenerateTemporarySession(ctx context.Context, sessionID string, exp time.Time, rdb *redis.Client) error {
+	if rdb == nil {
+		return errors.New("redis client is nil")
+	}
 	ttl := time.Until(exp)
 	if ttl <= 0 {
 		return nil // do not set already-expired sessions
@@ -60,11 +67,17 @@ func GenerateTemporarySession(ctx context.Context, sessionID string, exp time.Ti
 }
 
 func DeleteTemporarySession(ctx context.Context, sessionID string, rdb *redis.Client) error {
+	if rdb == nil {
+		return errors.New("redis client is nil")
+	}
 	return rdb.Del(ctx, "temporary_session:"+sessionID).Err()
 }
 
 // DeleteSession removes the access-token session and any associated refresh
 // token from Redis. Used on logout and on refresh-token reuse detection.
 func DeleteSession(ctx context.Context, sessionID string, rdb *redis.Client) error {
+	if rdb == nil {
+		return errors.New("redis client is nil")
+	}
 	return rdb.Del(ctx, "session:"+sessionID, "refresh:"+sessionID).Err()
 }

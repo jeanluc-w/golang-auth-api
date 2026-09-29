@@ -128,6 +128,23 @@ See [Configuration](#configuration) below for what every variable does.
 go run ./cmd/main.go
 ```
 
+### 5. (Optional) Build the production image
+
+A multi-stage [`Dockerfile`](Dockerfile) builds a static (`CGO_ENABLED=0`)
+binary and ships it on `distroless/static-debian12:nonroot` — no shell, no
+package manager, non-root by default. JWT keys and other file-based secrets
+are mounted in at runtime, never baked into the image.
+
+```bash
+docker build -t auth-api .
+# JWT_*_KEY_FILE in .env defaults to ./secrets/..., resolved against the
+# container's /app working directory — hence mounting to /app/secrets here.
+# DATABASE_URL/REDIS_ADDR pointing at "localhost" also won't reach services
+# running on the host from inside the container; adjust those for wherever
+# Postgres/Redis actually are in your setup (a Docker network, a cloud DB, etc).
+docker run --rm -p 8080:8080 --env-file .env -v "$(pwd)/secrets:/app/secrets:ro" auth-api
+```
+
 ## Configuration
 
 All configuration is environment variables (see `config/config.go` for the
@@ -226,6 +243,14 @@ Written for someone reviewing this as a reference, not just using it — the
   quietly exempt every auth-failure request from rate limiting — that
   tradeoff is documented in the code because it's easy to "fix" the wrong
   way.
+- **Dependencies are scanned with [`govulncheck`](https://go.dev/blog/vuln)**
+  in CI (and via `make vulncheck` locally), which does call-graph analysis
+  rather than flagging every CVE in every transitive dependency regardless
+  of whether the vulnerable code path is ever reached. This caught a real,
+  reachable SQL-injection CVE in an earlier `pgx` version during development
+  (GO-2026-5004, fixed by upgrading to `pgx v5.9.2`) — worth keeping in CI
+  rather than a one-time check, since new CVEs get disclosed against
+  dependencies you never touched.
 
 ## Not implemented
 
@@ -273,10 +298,19 @@ Resend client is redirected at a local `httptest.Server` via its exported
 `BaseURL` field — no real network access, no mocking library needed).
 
 Redis-touching code that doesn't need a real Postgres (`internal/auth/session.go`,
-`otp_code.go`) is tested against [miniredis](https://github.com/alicebob/miniredis)
-— a real `*redis.Client` pointed at an in-memory server — rather than
-pushed into the Docker-gated suite, so it stays fast or CI-friendly without
-losing real-Redis-client behavior.
+`otp_code.go`, `jwt.go`'s token issuance/verification, and
+`internal/middleware/jwt.go`) is tested against
+[miniredis](https://github.com/alicebob/miniredis) — a real `*redis.Client`
+pointed at an in-memory server — rather than pushed into the Docker-gated
+suite, so it stays fast and CI-friendly without losing real-Redis-client
+behavior. This is how the core auth gate (`JWTMiddleware`, token
+issuance/rotation, session revocation) gets exercised at the unit level, not
+just end-to-end.
+
+`internal/middleware/logging.go` (request logging + panic recovery) and
+`timeout.go` are unit-tested directly too, using `zaptest/observer` to
+assert on log output and a slow handler to trigger the timeout — no Docker
+or real server needed for either.
 
 ### Integration tests
 
@@ -288,10 +322,11 @@ Requires a working Docker (or Podman, via testcontainers' compatibility
 mode) daemon.
 
 This is also the **only** layer that drives requests through the real HTTP
-stack — `internal/handlers`, `internal/middleware/{jwt,rate_limit,timeout}.go`,
-and route registration all have zero coverage anywhere else, since every
-other test calls service functions directly. `http_server_test.go` builds
-the exact same `handlers.NewHandler` production code uses and serves it via
+stack — `internal/handlers`, `internal/services`, `internal/db/postgres`,
+and route registration have no coverage anywhere else, since unit tests
+either call package-internal logic directly or don't need a real
+database/HTTP round trip at all. `http_server_test.go` builds the exact same
+`handlers.NewHandler` production code uses and serves it via
 `httptest.Server`, covering: open-route auth bypass, protected-route
 rejection of missing/malformed/tampered/expired/revoked tokens, the
 refresh-token route's special expired-access-token acceptance, temp-JWT-vs-
@@ -310,6 +345,36 @@ running this suite.
 cd test/integration
 go test ./...
 ```
+
+### CI and git hooks
+
+Every push and pull request against `dev`/`main` runs
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml): `go mod tidy`/`gofmt`
+drift checks, `go vet`, a full build, the unit test suite (`-race`), and the
+Docker-backed integration suite, each as a separate required job. To make
+these required PR checks (not just informational), turn on branch protection
+for `dev`/`main` in **Settings → Branches → Add rule** and require the `test`
+and `integration-test` status checks before merging — this repo can't enable
+that setting on its own, since it's a GitHub repo-admin action rather than a
+file in the repo.
+
+The same checks are available locally through the `Makefile`:
+
+```bash
+make hooks             # one-time per clone: installs the pre-commit hook below
+make tidy fmt vet test  # what CI runs against the main module
+make test-integration   # what CI runs against test/integration (needs Docker)
+make ci                 # everything, in one shot
+```
+
+`make hooks` points git at [`.githooks/pre-commit`](.githooks/pre-commit),
+which runs gofmt/vet/tidy/test for both modules before every commit —
+including the integration suite, automatically, whenever Docker is
+reachable (skipped with a warning otherwise, since forcing container
+start-up on every commit would be too slow for a tight edit loop). Like any
+client-side hook it's opt-in per clone and can be bypassed with
+`git commit --no-verify`; the CI workflow above is the actual, unbypassable
+gate.
 
 ## Database
 

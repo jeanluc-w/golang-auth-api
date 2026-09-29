@@ -221,3 +221,32 @@ func TestDeleteSession(t *testing.T) {
 		t.Errorf("DeleteSession on missing keys returned an error: %v", err)
 	}
 }
+
+// TestNilRedisClient_FailsSafely locks in that every session function
+// handles a nil *redis.Client by erroring/failing closed rather than
+// panicking. A nil client should never happen in production (it's set once
+// at startup), but a defensive nil check is cheap and turns a
+// misconfiguration into a clear error/500 instead of a panic.
+func TestNilRedisClient_FailsSafely(t *testing.T) {
+	ctx := context.Background()
+	future := time.Now().Add(time.Hour)
+
+	if IsValidSession(ctx, "sess", future, nil) {
+		t.Error("expected IsValidSession(nil) to fail closed")
+	}
+	if IsValidTemporarySession(ctx, "sess", future, nil) {
+		t.Error("expected IsValidTemporarySession(nil) to fail closed")
+	}
+	if err := GenerateSession(ctx, "sess", future, nil); err == nil {
+		t.Error("expected GenerateSession(nil) to return an error")
+	}
+	if err := GenerateTemporarySession(ctx, "sess", future, nil); err == nil {
+		t.Error("expected GenerateTemporarySession(nil) to return an error")
+	}
+	if err := DeleteSession(ctx, "sess", nil); err == nil {
+		t.Error("expected DeleteSession(nil) to return an error")
+	}
+	if err := DeleteTemporarySession(ctx, "sess", nil); err == nil {
+		t.Error("expected DeleteTemporarySession(nil) to return an error")
+	}
+}
