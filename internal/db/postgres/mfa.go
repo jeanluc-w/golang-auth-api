@@ -38,3 +38,30 @@ func CompleteMFAEnrollment(ctx context.Context, db *pgxpool.Pool, factorID pgtyp
 		return nil
 	})
 }
+
+// CompleteOTPFactorEnrollment is CompleteMFAEnrollment's counterpart for
+// email/SMS factors: same atomicity guarantee (never verified without
+// recovery codes or vice versa), just without a matched-step to record,
+// since those factor types have no TOTP-style time-step to replay-guard.
+func CompleteOTPFactorEnrollment(ctx context.Context, db *pgxpool.Pool, factorID pgtype.UUID, recoveryCodeHashes []string) error {
+	return WithTx(ctx, db, func(qtx *Queries) error {
+		if err := qtx.VerifyOTPFactor(ctx, factorID); err != nil {
+			return err
+		}
+		if err := qtx.RecordOTPFactorSuccess(ctx, factorID); err != nil {
+			return err
+		}
+		if err := qtx.DeleteMFARecoveryCodesByFactor(ctx, factorID); err != nil {
+			return err
+		}
+		for _, hash := range recoveryCodeHashes {
+			if err := qtx.CreateMFARecoveryCode(ctx, CreateMFARecoveryCodeParams{
+				FactorID: factorID,
+				CodeHash: hash,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

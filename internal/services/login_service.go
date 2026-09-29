@@ -27,10 +27,15 @@ type LoginResult struct {
 	// MFARequired is true when the password was correct but the account
 	// has MFA enabled: AccessToken/RefreshToken/UserID/Username are all
 	// empty in that case, and MFAChallengeToken must be submitted (along
-	// with a TOTP or recovery code) to services.VerifyMFALogin to actually
-	// complete the login.
+	// with a code) to services.VerifyMFALogin to actually complete the
+	// login. MFAMethod tells the caller which channel that code comes
+	// from: "totp" (the user's authenticator app already has one — no
+	// further action needed before submitting it) or "email"/"sms" (the
+	// caller must first call services.SendMFALoginCode to actually
+	// deliver one).
 	MFARequired       bool
 	MFAChallengeToken string
+	MFAMethod         string
 }
 
 // Login authenticates an email/password pair, applies failed-attempt
@@ -116,28 +121,28 @@ func Login(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, ema
 	}
 
 	// MFA gate: a correct password alone isn't enough to finish logging in
-	// on an MFA-enabled account. GetTOTPFactorByUserID erroring for any
-	// reason OTHER than "no such row" is treated as an internal error that
-	// FAILS THE LOGIN, not as "assume MFA is off" — an attacker able to
-	// somehow make this one lookup error out must not be able to use that
-	// to skip MFA. Don't relax this without a very good reason.
-	mfaFactor, mfaErr := q.GetTOTPFactorByUserID(ctx, identity.UserID)
-	switch {
-	case mfaErr == nil && mfaFactor.Enabled.Bool:
+	// on an MFA-enabled account. resolveMFAMethod erroring for any reason
+	// is treated as an internal error that FAILS THE LOGIN, not as "assume
+	// MFA is off" — an attacker able to somehow make that lookup error out
+	// must not be able to use that to skip MFA. Don't relax this without a
+	// very good reason.
+	method, mfaEnabled, mfaErr := resolveMFAMethod(ctx, q, identity.UserID)
+	if mfaErr != nil {
+		utils.LogError(ctx, "resolveMFAMethod failed", zap.Error(mfaErr))
+		return nil, &utils.Errors.InternalServerError
+	}
+	if mfaEnabled {
 		challengeToken, err := auth.GenerateTemporaryJWT(ctx, redisClient, identity.UserID.String(), entities.RoleMFAPending, config.Loaded.MFAChallengeTTL)
 		if err != nil {
 			utils.LogError(ctx, "Failed to generate MFA challenge token", zap.Error(err))
 			return nil, &utils.Errors.InternalServerError
 		}
 		recordLoginAttempt(ctx, q, identity.UserID, identity.IdentityID, postgres.LoginResultMfaRequired, ip, ua)
-		utils.LogInfo(ctx, "Login password verified; MFA challenge issued", zap.String("user_id", identity.UserID.String()))
-		return &LoginResult{MFARequired: true, MFAChallengeToken: challengeToken}, nil
-	case mfaErr != nil && !errors.Is(mfaErr, pgx.ErrNoRows):
-		utils.LogError(ctx, "GetTOTPFactorByUserID failed", zap.Error(mfaErr))
-		return nil, &utils.Errors.InternalServerError
+		utils.LogInfo(ctx, "Login password verified; MFA challenge issued", zap.String("user_id", identity.UserID.String()), zap.String("method", method))
+		return &LoginResult{MFARequired: true, MFAChallengeToken: challengeToken, MFAMethod: method}, nil
 	}
-	// Otherwise: pgx.ErrNoRows (never enrolled) or a factor exists but
-	// isn't enabled (abandoned enrollment) — proceed as a normal login.
+	// Otherwise: no factor is both verified and enabled — proceed as a
+	// normal login.
 
 	// Transparently upgrade the stored hash if it used retired argon2
 	// params or a rotated-out pepper. Only possible here (not in

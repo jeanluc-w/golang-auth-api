@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"strings"
 	"time"
@@ -111,16 +112,9 @@ func VerifyMFAEnrollment(ctx context.Context, db *pgxpool.Pool, userID, code str
 		return nil, &utils.Errors.InvalidMFACode
 	}
 
-	rawCodes := make([]string, 0, config.Loaded.MFARecoveryCodeCount)
-	hashes := make([]string, 0, config.Loaded.MFARecoveryCodeCount)
-	for i := 0; i < config.Loaded.MFARecoveryCodeCount; i++ {
-		rawCode, err := auth.GenerateMFARecoveryCode()
-		if err != nil {
-			utils.LogError(ctx, "GenerateMFARecoveryCode failed", zap.Error(err))
-			return nil, &utils.Errors.InternalServerError
-		}
-		rawCodes = append(rawCodes, rawCode)
-		hashes = append(hashes, auth.HashOpaqueToken(rawCode))
+	rawCodes, hashes, errDetail := generateRecoveryCodes(ctx, config.Loaded.MFARecoveryCodeCount)
+	if errDetail != nil {
+		return nil, errDetail
 	}
 
 	if err := postgres.CompleteMFAEnrollment(ctx, db, factor.ID, step, hashes); err != nil {
@@ -143,18 +137,8 @@ func DisableMFA(ctx context.Context, db *pgxpool.Pool, userID, currentPassword s
 	}
 	q := postgres.New(db)
 
-	identity, err := q.GetEmailAuthByUserID(ctx, userPG)
-	if err != nil {
-		utils.LogError(ctx, "GetEmailAuthByUserID failed", zap.Error(err))
-		return &utils.Errors.InternalServerError
-	}
-	ok2, err := auth.VerifyPasswordPHC(currentPassword, identity.PasswordHash.String, true)
-	if err != nil {
-		utils.LogError(ctx, "VerifyPasswordPHC failed", zap.Error(err))
-		return &utils.Errors.InternalServerError
-	}
-	if !ok2 {
-		return &utils.Errors.InvalidCredentials
+	if errDetail := verifyCurrentPasswordForFactorAction(ctx, q, userPG, currentPassword); errDetail != nil {
+		return errDetail
 	}
 
 	if _, err := q.GetTOTPFactorByUserID(ctx, userPG); err != nil {
@@ -176,8 +160,13 @@ func DisableMFA(ctx context.Context, db *pgxpool.Pool, userID, currentPassword s
 
 // VerifyMFALogin is the second step of logging into an MFA-enabled account
 // (see Login's MFARequired branch): given the challenge token from step one
-// plus a TOTP or recovery code, it completes authentication exactly like a
-// normal Login would.
+// plus a code, it completes authentication exactly like a normal Login
+// would. The code is tried, in order, as: a TOTP code (if TOTP is
+// enabled), an email login code (if email MFA is enabled — see
+// SendMFALoginCode, which must have already been called to actually
+// deliver one), and finally a recovery code, which works regardless of
+// which factor type is enabled since mfa_recovery_codes rows aren't
+// filtered by factor.
 func VerifyMFALogin(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, challengeToken, code string) (*LoginResult, *utils.ErrorDetail) {
 	userID, challengeSessionID, err := auth.VerifyAndParseTemporaryJWT(ctx, redisClient, "Bearer "+challengeToken, entities.RoleMFAPending)
 	if err != nil {
@@ -189,39 +178,70 @@ func VerifyMFALogin(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Cl
 		return nil, &utils.Errors.Unauthorized
 	}
 	q := postgres.New(db)
+	codeParsed := strings.TrimSpace(code)
 
-	factor, err := q.GetTOTPFactorByUserID(ctx, userPG)
-	if err != nil || !factor.Enabled.Bool {
-		// Shouldn't normally be reachable (the challenge is only ever
-		// issued because MFA was enabled at that moment), but the account
-		// could have had MFA disabled in the few seconds since — refuse
-		// rather than silently skip the check that was supposed to happen.
-		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-			utils.LogError(ctx, "GetTOTPFactorByUserID failed", zap.Error(err))
+	authenticated := false
+	anyFactorEnabled := false
+	var failedFactorID pgtype.UUID
+
+	// 1. TOTP.
+	if totpFactor, ferr := q.GetTOTPFactorByUserID(ctx, userPG); ferr == nil && totpFactor.Enabled.Bool {
+		anyFactorEnabled = true
+		if secret, decErr := auth.DecryptMFASecret(totpFactor.Secret.String); decErr != nil {
+			utils.LogError(ctx, "DecryptMFASecret failed", zap.Error(decErr))
+			return nil, &utils.Errors.InternalServerError
+		} else if step, valid := auth.ValidateTOTPCode(secret, codeParsed, totpFactor.LastUsedStep.Int64, time.Now()); valid {
+			if err := q.RecordTOTPSuccess(ctx, postgres.RecordTOTPSuccessParams{
+				Step: pgtype.Int8{Int64: step, Valid: true},
+				ID:   totpFactor.ID,
+			}); err != nil {
+				utils.LogWarn(ctx, "RecordTOTPSuccess failed", zap.Error(err))
+			}
+			authenticated = true
+		} else {
+			failedFactorID = totpFactor.ID
+		}
+	} else if ferr != nil && !errors.Is(ferr, pgx.ErrNoRows) {
+		utils.LogError(ctx, "GetTOTPFactorByUserID failed", zap.Error(ferr))
+		return nil, &utils.Errors.InternalServerError
+	}
+
+	// 2. Email login code, only if TOTP didn't already succeed.
+	if !authenticated {
+		if emailFactor, ferr := q.GetOTPFactorByUserID(ctx, postgres.GetOTPFactorByUserIDParams{UserID: userPG, Type: postgres.MfaTypeEmail}); ferr == nil && emailFactor.Enabled.Bool {
+			anyFactorEnabled = true
+			if meta, mErr := auth.GetMFAOTPCode(ctx, redisClient, "email", "login", userID); mErr == nil {
+				switch {
+				case time.Now().After(meta.ExpiresAt):
+					// Expired — falls through to the failure path below.
+				case meta.Attempts >= meta.MaxAttempts:
+					// Too many wrong guesses against this code — same.
+				case constantTimeEqual(codeParsed, meta.Code):
+					if err := q.RecordOTPFactorSuccess(ctx, emailFactor.ID); err != nil {
+						utils.LogWarn(ctx, "RecordOTPFactorSuccess failed", zap.Error(err))
+					}
+					if err := auth.DeleteMFAOTPCode(ctx, redisClient, "email", "login", userID); err != nil {
+						utils.LogWarn(ctx, "DeleteMFAOTPCode failed", zap.Error(err))
+					}
+					authenticated = true
+				default:
+					meta.Attempts++
+					if err := auth.SaveMFAOTPCode(ctx, redisClient, "email", "login", userID, *meta); err != nil {
+						utils.LogWarn(ctx, "SaveMFAOTPCode failed", zap.Error(err))
+					}
+				}
+			}
+			if !authenticated {
+				failedFactorID = emailFactor.ID
+			}
+		} else if ferr != nil && !errors.Is(ferr, pgx.ErrNoRows) {
+			utils.LogError(ctx, "GetOTPFactorByUserID(email) failed", zap.Error(ferr))
 			return nil, &utils.Errors.InternalServerError
 		}
-		return nil, &utils.Errors.MFANotEnabled
 	}
 
-	codeParsed := strings.TrimSpace(code)
-	authenticated := false
-
-	if secret, decErr := auth.DecryptMFASecret(factor.Secret.String); decErr != nil {
-		utils.LogError(ctx, "DecryptMFASecret failed", zap.Error(decErr))
-		return nil, &utils.Errors.InternalServerError
-	} else if step, valid := auth.ValidateTOTPCode(secret, codeParsed, factor.LastUsedStep.Int64, time.Now()); valid {
-		if err := q.RecordTOTPSuccess(ctx, postgres.RecordTOTPSuccessParams{
-			Step: pgtype.Int8{Int64: step, Valid: true},
-			ID:   factor.ID,
-		}); err != nil {
-			utils.LogWarn(ctx, "RecordTOTPSuccess failed", zap.Error(err))
-		}
-		authenticated = true
-	}
-
-	// Not a valid TOTP code (or already replayed) — try it as a recovery
-	// code before giving up. Recovery codes are generated uppercase; accept
-	// lowercase input too rather than rejecting on a case mismatch alone.
+	// 3. Recovery code — accept lowercase input too rather than rejecting
+	// on a case mismatch alone (codes are generated uppercase).
 	if !authenticated {
 		codeHash := auth.HashOpaqueToken(strings.ToUpper(codeParsed))
 		if recoveryID, rcErr := q.GetUnusedMFARecoveryCode(ctx, codeHash); rcErr == nil {
@@ -236,9 +256,18 @@ func VerifyMFALogin(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Cl
 		}
 	}
 
+	if !anyFactorEnabled {
+		// Shouldn't normally be reachable (the challenge is only ever
+		// issued because some factor was enabled at that moment), but every
+		// factor could have been disabled in the few seconds since — refuse
+		// rather than silently skip the check that was supposed to happen.
+		return nil, &utils.Errors.MFANotEnabled
+	}
 	if !authenticated {
-		if err := q.IncrementTOTPFailedAttempts(ctx, factor.ID); err != nil {
-			utils.LogWarn(ctx, "IncrementTOTPFailedAttempts failed", zap.Error(err))
+		if failedFactorID.Valid {
+			if err := q.IncrementOTPFactorFailedAttempts(ctx, failedFactorID); err != nil {
+				utils.LogWarn(ctx, "IncrementOTPFactorFailedAttempts failed", zap.Error(err))
+			}
 		}
 		utils.LogDebug(ctx, "MFA login verification failed", zap.String("user_id", userID))
 		return nil, &utils.Errors.InvalidMFACode
@@ -273,4 +302,83 @@ func parseUserID(userID string) (pgtype.UUID, bool) {
 		return pgtype.UUID{}, false
 	}
 	return pgtype.UUID{Bytes: parsed, Valid: true}, true
+}
+
+// generateRecoveryCodes creates n fresh one-time recovery codes, returning
+// both the raw codes (shown to the user exactly once) and their hashes
+// (what actually gets persisted) — shared by every factor type's
+// enrollment-verification step.
+func generateRecoveryCodes(ctx context.Context, n int) (rawCodes, hashes []string, errDetail *utils.ErrorDetail) {
+	rawCodes = make([]string, 0, n)
+	hashes = make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		rawCode, err := auth.GenerateMFARecoveryCode()
+		if err != nil {
+			utils.LogError(ctx, "GenerateMFARecoveryCode failed", zap.Error(err))
+			return nil, nil, &utils.Errors.InternalServerError
+		}
+		rawCodes = append(rawCodes, rawCode)
+		hashes = append(hashes, auth.HashOpaqueToken(rawCode))
+	}
+	return rawCodes, hashes, nil
+}
+
+// verifyCurrentPasswordForFactorAction re-authenticates via the current
+// password before an action that turns off a security control (disabling
+// any MFA factor type) — a stolen/replayed session token alone must not be
+// enough, since an attacker holding one still doesn't know the password.
+func verifyCurrentPasswordForFactorAction(ctx context.Context, q *postgres.Queries, userPG pgtype.UUID, currentPassword string) *utils.ErrorDetail {
+	identity, err := q.GetEmailAuthByUserID(ctx, userPG)
+	if err != nil {
+		utils.LogError(ctx, "GetEmailAuthByUserID failed", zap.Error(err))
+		return &utils.Errors.InternalServerError
+	}
+	ok, err := auth.VerifyPasswordPHC(currentPassword, identity.PasswordHash.String, true)
+	if err != nil {
+		utils.LogError(ctx, "VerifyPasswordPHC failed", zap.Error(err))
+		return &utils.Errors.InternalServerError
+	}
+	if !ok {
+		return &utils.Errors.InvalidCredentials
+	}
+	return nil
+}
+
+// constantTimeEqual compares two OTP codes without leaking timing
+// information about how much of a guess matched — the same reasoning
+// auth.ValidateTOTPCode already applies to TOTP codes, extended to
+// email/SMS ones.
+func constantTimeEqual(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
+// resolveMFAMethod determines which MFA method (if any) protects a login
+// for the given user, in priority order TOTP > email > SMS (arbitrary but
+// deterministic — a client-side factor picker for an account with more
+// than one enabled is a UI concern, not handled here). Like the
+// TOTP-only check this generalizes, it fails closed: a DB error on ANY of
+// these lookups returns an error rather than silently treating that
+// factor as absent, so a caller can't skip MFA by somehow making a lookup
+// error out.
+func resolveMFAMethod(ctx context.Context, q *postgres.Queries, userID pgtype.UUID) (method string, enabled bool, err error) {
+	totpFactor, err := q.GetTOTPFactorByUserID(ctx, userID)
+	if err == nil && totpFactor.Enabled.Bool {
+		return "totp", true, nil
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", false, err
+	}
+
+	emailFactor, err := q.GetOTPFactorByUserID(ctx, postgres.GetOTPFactorByUserIDParams{UserID: userID, Type: postgres.MfaTypeEmail})
+	if err == nil && emailFactor.Enabled.Bool {
+		return "email", true, nil
+	}
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return "", false, err
+	}
+
+	return "", false, nil
 }

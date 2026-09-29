@@ -38,6 +38,13 @@ using it for anything real.
   and one-time recovery codes (only their hash is persisted) for when the
   device is unavailable. Gates login via a short-lived challenge token, not
   a second password.
+- **Email-based MFA** as a second factor type alongside TOTP (same
+  `mfa_factors` table, same recovery-code fallback): enrollment and
+  login-time codes both go to the account's own already-verified email —
+  never a caller-supplied address — with the same expiry/attempt-limit/
+  constant-time-comparison treatment as TOTP codes and a resend cooldown
+  matching the signup verification code's. See [Security
+  notes](#security-notes) for why it doesn't auto-send on login.
 - **SSO (Google, Apple)** via OIDC ID token verification against each
   provider's live JWKS (signature, issuer, audience, expiry — see
   `internal/auth/oidc.go`), with a deliberately conservative account-linking
@@ -121,7 +128,11 @@ understand any given flow — they're not thin passthroughs to the DB.
 | POST   | `/auth/v1/mfa/enroll`               | access JWT             | Start TOTP enrollment; returns a secret + QR provisioning URI |
 | POST   | `/auth/v1/mfa/verify`               | access JWT             | Confirm enrollment with a code; activates MFA and returns recovery codes |
 | POST   | `/auth/v1/mfa/disable`              | access JWT + current password | Turn MFA off |
-| POST   | `/auth/v1/mfa/verify-login`         | MFA challenge token in body | Complete an MFA-gated login with a TOTP or recovery code |
+| POST   | `/auth/v1/mfa/verify-login`         | MFA challenge token in body | Complete an MFA-gated login with a code |
+| POST   | `/auth/v1/mfa/send-login-code`      | MFA challenge token in body | Deliver (or re-deliver) a login code for an email/SMS MFA challenge |
+| POST   | `/auth/v1/mfa/email/enroll`         | access JWT             | Start email MFA enrollment; emails a code to the account's own address |
+| POST   | `/auth/v1/mfa/email/verify`         | access JWT             | Confirm enrollment with the emailed code; activates it and returns recovery codes |
+| POST   | `/auth/v1/mfa/email/disable`        | access JWT + current password | Turn email MFA off |
 | POST   | `/auth/v1/sso/google`               | none                   | Log in or sign up with a Google ID token |
 | POST   | `/auth/v1/sso/apple`                | none                   | Log in or sign up with an Apple identity token |
 | GET    | `/auth/v1/admin/users`              | access JWT (moderator+) | List/search user accounts |
@@ -136,7 +147,7 @@ understand any given flow — they're not thin passthroughs to the DB.
 | DELETE | `/auth/v1/admin/users/:id`          | access JWT (admin-only) | Soft-delete an account and revoke all of its sessions |
 | GET    | `/auth/v1/admin/audit-logs`         | access JWT (moderator+) | List audit log entries, optionally filtered to one user |
 
-A `login` response for an MFA-enabled account is `{"mfa_required": true, "challenge_token": "..."}` instead of tokens — submit that token plus a code to `mfa/verify-login` to actually complete the login.
+A `login` response for an MFA-enabled account is `{"mfa_required": true, "challenge_token": "...", "method": "totp"|"email"}` instead of tokens. For `"totp"`, submit a code from the authenticator app directly to `mfa/verify-login`. For `"email"`, call `mfa/send-login-code` first to actually deliver a code (nothing is sent automatically just because a login attempt happened — see [Security notes](#security-notes)), then submit it the same way. A recovery code works at `mfa/verify-login` regardless of which method is active.
 
 All error responses are `{"error": "<code>", "message": "<human text>"}`
 with an appropriate HTTP status; see `internal/utils/error_codes.go` for the
@@ -347,6 +358,27 @@ Written for someone reviewing this as a reference, not just using it — the
   turning off a security control must not be possible with a stolen/replayed
   access token alone, since an attacker holding one still doesn't know the
   password.
+- **Email MFA never sends a code as a side effect of a successful
+  password login** — `Login` returning `mfa_required` for an email-MFA
+  account does not itself trigger an email; the client must call
+  `mfa/send-login-code` separately. Sending mail is a side effect with its
+  own failure modes and cost, and a query-shaped call (checking whether
+  password+account are valid) is the wrong place to hide one — a resend
+  button on a "check your email" screen also needs to call the exact same
+  endpoint either way, so nothing is saved by special-casing the first
+  send.
+- **Email MFA enrollment and login codes always go to the account's own,
+  already-verified email** (`GetUserEmailByID`, not any caller-supplied
+  address) — an enrollment call can't be used to redirect codes to an
+  attacker-controlled inbox, and there's no separate "verify this new MFA
+  email" loop to get wrong because there's no separate email at all.
+- **Recovery codes are generic across factor types, deliberately** —
+  `mfa_recovery_codes` rows are looked up by hash alone
+  (`GetUnusedMFARecoveryCode`), not filtered to whichever factor issued
+  them, so a code from TOTP enrollment works as an email-MFA login fallback
+  and vice versa. This is a natural consequence of `factor_id` being a
+  foreign key rather than a type discriminator, not a special case that had
+  to be built.
 - **SSO account-linking is deliberately conservative** (`services.SSOLogin`):
   an ID token whose `email_verified` claim is false is refused outright,
   whether the flow would have created a new account or logged into an
@@ -425,12 +457,16 @@ The database schema (`db/migrations/001_init.up.sql`) already has tables for
 a few features the API still doesn't expose — they were designed for, not
 retrofitted:
 
-- **MFA via SMS or email** (`mfa_factors.type` supports them, and the
-  `UNIQUE(user_id, type)` constraint means a user could have one of each
-  alongside TOTP) — TOTP is the only type with a working code path so far.
-  See [Security notes](#security-notes) once SMS/email MFA land for the
-  provider choice and why email MFA is a meaningfully weaker factor than
-  TOTP (same inbox as password reset).
+- **MFA via SMS** (`mfa_factors.type` supports it, and the
+  `UNIQUE(user_id, type)` constraint means a user could have TOTP, email,
+  and SMS factors simultaneously) — TOTP and email both have working code
+  paths now; SMS needs a paid provider integration (Twilio et al.) not yet
+  wired in.
+- **A client-facing "which MFA method do I have" picker** — when more than
+  one factor type is enabled for an account, `resolveMFAMethod`
+  (`internal/services/mfa_service.go`) always offers TOTP first, then
+  email, in a fixed priority order; there's no way for the client to ask
+  for a different enabled method instead.
 - **Linking an additional SSO provider (or email/password) to an
   already-authenticated account** — `services.SSOLogin` currently rejects
   an SSO login whose email already has an account under a different
@@ -497,7 +533,10 @@ tokens, and that a reset actually revokes every prior session in both
 Postgres and Redis — `password_reset_test.go`), authenticated password
 change (`change_password_test.go`), the full MFA lifecycle (enroll → verify
 → MFA-gated login via TOTP or a recovery code → disable, plus wrong-code and
-wrong-password rejection — `mfa_test.go`), SSO's account-linking policy
+wrong-password rejection — `mfa_test.go`), the same lifecycle for email MFA
+plus the login-time `send-login-code` gate (rejected for a TOTP-only
+challenge, a resend cooldown, and that a TOTP recovery code still works as
+an email-MFA login fallback — `mfa_email_test.go`), SSO's account-linking policy
 (new account, existing login, email-not-verified, email-conflict across
 providers, username-collision suffixing — `sso_test.go`), the admin API's
 authorization/attribution model (ban/unban/disable/enable/force-logout all

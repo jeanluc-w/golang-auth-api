@@ -1,7 +1,11 @@
--- Only the 'totp' factor type has a working code path (see README's "Not
--- implemented" section for sms/email); every query here is scoped to it
--- explicitly rather than assuming it's the only row type mfa_factors will
--- ever hold.
+-- TOTP has its own dedicated queries below (an encrypted secret and a
+-- last_used_step anti-replay column with no equivalent for other factor
+-- types). Email and SMS factors, further down, share one generic set of
+-- OTP-factor queries instead — unlike TOTP they store no secret at all
+-- (verifying either just means "we sent a code to this user's registered
+-- email/phone and they read it back to us"), so their DB shape is
+-- identical to each other and parameterizing by type is the right level of
+-- abstraction rather than duplicating the same queries twice.
 
 -- name: UpsertPendingTOTPFactor :one
 -- Starts (or restarts, if a previous attempt was abandoned) TOTP
@@ -72,3 +76,46 @@ WHERE code_hash = sqlc.arg(code_hash) AND used_at IS NULL;
 UPDATE mfa_recovery_codes
 SET used_at = now()
 WHERE id = sqlc.arg(id);
+
+-- Generic email/SMS OTP-factor queries — see the file header comment.
+
+-- name: UpsertPendingOTPFactor :one
+-- Starts (or restarts) email/SMS enrollment for the given type. No secret
+-- is stored — the one-time code itself lives only in Redis
+-- (internal/auth/mfa_otp_code.go), scoped to this enrollment attempt.
+INSERT INTO mfa_factors (user_id, type, verified, enabled, failed_attempts, last_used_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(type), FALSE, FALSE, 0, NULL)
+ON CONFLICT (user_id, type) DO UPDATE
+  SET verified = FALSE,
+      enabled = FALSE,
+      failed_attempts = 0,
+      last_used_at = NULL,
+      created_at = now()
+RETURNING id;
+
+-- name: GetOTPFactorByUserID :one
+SELECT id, verified, enabled, failed_attempts
+FROM mfa_factors
+WHERE user_id = sqlc.arg(user_id) AND type = sqlc.arg(type);
+
+-- name: VerifyOTPFactor :exec
+UPDATE mfa_factors
+SET verified = TRUE, enabled = TRUE
+WHERE id = sqlc.arg(id);
+
+-- name: DeleteOTPFactor :exec
+DELETE FROM mfa_factors
+WHERE user_id = sqlc.arg(user_id) AND type = sqlc.arg(type);
+
+-- name: RecordOTPFactorSuccess :exec
+UPDATE mfa_factors
+SET last_used_at = now(), failed_attempts = 0
+WHERE id = sqlc.arg(id);
+
+-- name: IncrementOTPFactorFailedAttempts :exec
+UPDATE mfa_factors
+SET failed_attempts = failed_attempts + 1
+WHERE id = sqlc.arg(id);
+
+-- name: GetUserEmailByID :one
+SELECT email FROM users WHERE id = sqlc.arg(id);

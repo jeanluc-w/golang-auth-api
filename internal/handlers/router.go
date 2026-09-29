@@ -38,6 +38,10 @@ func NewHandler(svcs *server.Services) http.Handler {
 	router.POST(server.V1_MFAVerifyEnrollment, h.MFAVerifyEnrollmentHandler)
 	router.POST(server.V1_MFADisable, h.MFADisableHandler)
 	router.POST(server.V1_MFAVerifyLogin, h.MFAVerifyLoginHandler)
+	router.POST(server.V1_MFASendLoginCode, h.MFASendLoginCodeHandler)
+	router.POST(server.V1_MFAEmailEnroll, h.MFAEmailEnrollHandler)
+	router.POST(server.V1_MFAEmailVerify, h.MFAEmailVerifyEnrollmentHandler)
+	router.POST(server.V1_MFAEmailDisable, h.MFAEmailDisableHandler)
 	// SSO APIs
 	router.POST(server.V1_SSOGoogle, h.SSOGoogleHandler)
 	router.POST(server.V1_SSOApple, h.SSOAppleHandler)

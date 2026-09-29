@@ -39,6 +39,10 @@ func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request, _ httpro
 			"message":         "MFA verification required",
 			"mfa_required":    true,
 			"challenge_token": result.MFAChallengeToken,
+			// "totp": submit a code from the authenticator app directly to
+			// mfa/verify-login. "email"/"sms": call mfa/send-login-code
+			// first to actually deliver one.
+			"method": result.MFAMethod,
 		})
 		return
 	}

@@ -39,6 +39,21 @@ func (q *Queries) DeleteMFARecoveryCodesByFactor(ctx context.Context, factorID p
 	return err
 }
 
+const deleteOTPFactor = `-- name: DeleteOTPFactor :exec
+DELETE FROM mfa_factors
+WHERE user_id = $1 AND type = $2
+`
+
+type DeleteOTPFactorParams struct {
+	UserID pgtype.UUID
+	Type   MfaType
+}
+
+func (q *Queries) DeleteOTPFactor(ctx context.Context, arg DeleteOTPFactorParams) error {
+	_, err := q.db.Exec(ctx, deleteOTPFactor, arg.UserID, arg.Type)
+	return err
+}
+
 const deleteTOTPFactor = `-- name: DeleteTOTPFactor :exec
 DELETE FROM mfa_factors
 WHERE user_id = $1 AND type = 'totp'
@@ -50,6 +65,36 @@ WHERE user_id = $1 AND type = 'totp'
 func (q *Queries) DeleteTOTPFactor(ctx context.Context, userID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteTOTPFactor, userID)
 	return err
+}
+
+const getOTPFactorByUserID = `-- name: GetOTPFactorByUserID :one
+SELECT id, verified, enabled, failed_attempts
+FROM mfa_factors
+WHERE user_id = $1 AND type = $2
+`
+
+type GetOTPFactorByUserIDParams struct {
+	UserID pgtype.UUID
+	Type   MfaType
+}
+
+type GetOTPFactorByUserIDRow struct {
+	ID             pgtype.UUID
+	Verified       pgtype.Bool
+	Enabled        pgtype.Bool
+	FailedAttempts pgtype.Int4
+}
+
+func (q *Queries) GetOTPFactorByUserID(ctx context.Context, arg GetOTPFactorByUserIDParams) (GetOTPFactorByUserIDRow, error) {
+	row := q.db.QueryRow(ctx, getOTPFactorByUserID, arg.UserID, arg.Type)
+	var i GetOTPFactorByUserIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Verified,
+		&i.Enabled,
+		&i.FailedAttempts,
+	)
+	return i, err
 }
 
 const getTOTPFactorByUserID = `-- name: GetTOTPFactorByUserID :one
@@ -94,6 +139,28 @@ func (q *Queries) GetUnusedMFARecoveryCode(ctx context.Context, codeHash string)
 	return id, err
 }
 
+const getUserEmailByID = `-- name: GetUserEmailByID :one
+SELECT email FROM users WHERE id = $1
+`
+
+func (q *Queries) GetUserEmailByID(ctx context.Context, id pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserEmailByID, id)
+	var email string
+	err := row.Scan(&email)
+	return email, err
+}
+
+const incrementOTPFactorFailedAttempts = `-- name: IncrementOTPFactorFailedAttempts :exec
+UPDATE mfa_factors
+SET failed_attempts = failed_attempts + 1
+WHERE id = $1
+`
+
+func (q *Queries) IncrementOTPFactorFailedAttempts(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, incrementOTPFactorFailedAttempts, id)
+	return err
+}
+
 const incrementTOTPFailedAttempts = `-- name: IncrementTOTPFailedAttempts :exec
 UPDATE mfa_factors
 SET failed_attempts = failed_attempts + 1
@@ -116,6 +183,17 @@ func (q *Queries) MarkMFARecoveryCodeUsed(ctx context.Context, id pgtype.UUID) e
 	return err
 }
 
+const recordOTPFactorSuccess = `-- name: RecordOTPFactorSuccess :exec
+UPDATE mfa_factors
+SET last_used_at = now(), failed_attempts = 0
+WHERE id = $1
+`
+
+func (q *Queries) RecordOTPFactorSuccess(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, recordOTPFactorSuccess, id)
+	return err
+}
+
 const recordTOTPSuccess = `-- name: RecordTOTPSuccess :exec
 UPDATE mfa_factors
 SET last_used_at = now(), last_used_step = $1, failed_attempts = 0
@@ -133,6 +211,35 @@ type RecordTOTPSuccessParams struct {
 func (q *Queries) RecordTOTPSuccess(ctx context.Context, arg RecordTOTPSuccessParams) error {
 	_, err := q.db.Exec(ctx, recordTOTPSuccess, arg.Step, arg.ID)
 	return err
+}
+
+const upsertPendingOTPFactor = `-- name: UpsertPendingOTPFactor :one
+
+INSERT INTO mfa_factors (user_id, type, verified, enabled, failed_attempts, last_used_at)
+VALUES ($1, $2, FALSE, FALSE, 0, NULL)
+ON CONFLICT (user_id, type) DO UPDATE
+  SET verified = FALSE,
+      enabled = FALSE,
+      failed_attempts = 0,
+      last_used_at = NULL,
+      created_at = now()
+RETURNING id
+`
+
+type UpsertPendingOTPFactorParams struct {
+	UserID pgtype.UUID
+	Type   MfaType
+}
+
+// Generic email/SMS OTP-factor queries — see the file header comment.
+// Starts (or restarts) email/SMS enrollment for the given type. No secret
+// is stored — the one-time code itself lives only in Redis
+// (internal/auth/mfa_otp_code.go), scoped to this enrollment attempt.
+func (q *Queries) UpsertPendingOTPFactor(ctx context.Context, arg UpsertPendingOTPFactorParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertPendingOTPFactor, arg.UserID, arg.Type)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const upsertPendingTOTPFactor = `-- name: UpsertPendingTOTPFactor :one
@@ -155,10 +262,14 @@ type UpsertPendingTOTPFactorParams struct {
 	Secret pgtype.Text
 }
 
-// Only the 'totp' factor type has a working code path (see README's "Not
-// implemented" section for sms/email); every query here is scoped to it
-// explicitly rather than assuming it's the only row type mfa_factors will
-// ever hold.
+// TOTP has its own dedicated queries below (an encrypted secret and a
+// last_used_step anti-replay column with no equivalent for other factor
+// types). Email and SMS factors, further down, share one generic set of
+// OTP-factor queries instead — unlike TOTP they store no secret at all
+// (verifying either just means "we sent a code to this user's registered
+// email/phone and they read it back to us"), so their DB shape is
+// identical to each other and parameterizing by type is the right level of
+// abstraction rather than duplicating the same queries twice.
 // Starts (or restarts, if a previous attempt was abandoned) TOTP
 // enrollment. ON CONFLICT target matches the UNIQUE(user_id, type)
 // constraint — trg_prevent_multiple_totp additionally enforces this at the
@@ -168,6 +279,17 @@ func (q *Queries) UpsertPendingTOTPFactor(ctx context.Context, arg UpsertPending
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const verifyOTPFactor = `-- name: VerifyOTPFactor :exec
+UPDATE mfa_factors
+SET verified = TRUE, enabled = TRUE
+WHERE id = $1
+`
+
+func (q *Queries) VerifyOTPFactor(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, verifyOTPFactor, id)
+	return err
 }
 
 const verifyTOTPFactor = `-- name: VerifyTOTPFactor :exec

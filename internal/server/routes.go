@@ -15,6 +15,10 @@ const (
 	V1_MFAVerifyEnrollment    string = "/auth/v1/mfa/verify"
 	V1_MFADisable             string = "/auth/v1/mfa/disable"
 	V1_MFAVerifyLogin         string = "/auth/v1/mfa/verify-login"
+	V1_MFASendLoginCode       string = "/auth/v1/mfa/send-login-code"
+	V1_MFAEmailEnroll         string = "/auth/v1/mfa/email/enroll"
+	V1_MFAEmailVerify         string = "/auth/v1/mfa/email/verify"
+	V1_MFAEmailDisable        string = "/auth/v1/mfa/email/disable"
 	V1_SSOGoogle              string = "/auth/v1/sso/google"
 	V1_SSOApple               string = "/auth/v1/sso/apple"
 	// Admin APIs (moderator+/admin-only — see handlers.requireRole)
@@ -44,6 +48,9 @@ var OpenRoutes = []string{
 	// mfa_pending challenge token carried in its own request body instead
 	// of the Authorization header; see services.VerifyMFALogin.
 	V1_MFAVerifyLogin,
+	// Same reasoning as V1_MFAVerifyLogin: authenticates via the challenge
+	// token in the body, not a full session.
+	V1_MFASendLoginCode,
 	V1_SSOGoogle,
 	V1_SSOApple,
 }
