@@ -260,7 +260,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 	return items, nil
 }
 
-const setActorID = `-- name: SetActorID :exec
+const setActorID = `-- name: SetActorID :one
 
 SELECT set_config('app.actor_id', $1::text, true)
 `
@@ -271,13 +271,22 @@ SELECT set_config('app.actor_id', $1::text, true)
 // 002_log_triggers.up.sql read — without it, admin-performed changes would
 // still be logged, just with a NULL actor, indistinguishable from a user
 // acting on their own account.
+// :one (QueryRow), not :exec — set_config() returns the value it just set
+// as a single-row, single-column result, and running it as an Exec (which
+// discards that row without ever reading it) left the connection's
+// extended-protocol state out of sync on return to the pool, corrupting
+// unrelated queries on whatever test reused that connection next. QueryRow
+// reads that row properly instead of discarding it unread.
+//
 // Must run in the same transaction as the query it's attributing — it uses
 // set_config's is_local=true, which is transaction-scoped, not
 // session-scoped (a pooled connection is reused across unrelated requests,
 // so a session-scoped setting would leak into the next one).
-func (q *Queries) SetActorID(ctx context.Context, actorID string) error {
-	_, err := q.db.Exec(ctx, setActorID, actorID)
-	return err
+func (q *Queries) SetActorID(ctx context.Context, actorID string) (string, error) {
+	row := q.db.QueryRow(ctx, setActorID, actorID)
+	var set_config string
+	err := row.Scan(&set_config)
+	return set_config, err
 }
 
 const setUserRole = `-- name: SetUserRole :exec

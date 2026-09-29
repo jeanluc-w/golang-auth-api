@@ -18,7 +18,7 @@ import (
 // requests.
 func WithActor(ctx context.Context, db *pgxpool.Pool, actorID string, fn func(*Queries) error) error {
 	return WithTx(ctx, db, func(qtx *Queries) error {
-		if err := qtx.SetActorID(ctx, actorID); err != nil {
+		if _, err := qtx.SetActorID(ctx, actorID); err != nil {
 			return err
 		}
 		return fn(qtx)

@@ -5,7 +5,14 @@
 -- still be logged, just with a NULL actor, indistinguishable from a user
 -- acting on their own account.
 
--- name: SetActorID :exec
+-- name: SetActorID :one
+-- :one (QueryRow), not :exec — set_config() returns the value it just set
+-- as a single-row, single-column result, and running it as an Exec (which
+-- discards that row without ever reading it) left the connection's
+-- extended-protocol state out of sync on return to the pool, corrupting
+-- unrelated queries on whatever test reused that connection next. QueryRow
+-- reads that row properly instead of discarding it unread.
+--
 -- Must run in the same transaction as the query it's attributing — it uses
 -- set_config's is_local=true, which is transaction-scoped, not
 -- session-scoped (a pooled connection is reused across unrelated requests,
