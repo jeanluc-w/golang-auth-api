@@ -20,12 +20,16 @@ func (h *Handlers) RequestPasswordResetHandler(w http.ResponseWriter, r *http.Re
 
 	var payload struct {
 		Email string `json:"email"`
+		// Source identifies the calling client ("web" or "mobile") for
+		// auditing on the password_resets row; omit or "web" for the
+		// default. See services.parsePasswordResetSource.
+		Source string `json:"source"`
 	}
 	if !utils.DecodeJSONHandler(w, r, &payload) {
 		return
 	}
 
-	if err := services.RequestPasswordReset(ctx, h.Svcs.DB, h.Svcs.RedisClient, h.Svcs.ResendClient, payload.Email); err != nil {
+	if err := services.RequestPasswordReset(ctx, h.Svcs.DB, h.Svcs.RedisClient, h.Svcs.ResendClient, payload.Email, payload.Source); err != nil {
 		utils.JSONError(w, *err)
 		return
 	}

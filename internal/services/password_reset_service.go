@@ -20,9 +20,29 @@ import (
 	"go.uber.org/zap"
 )
 
+// parsePasswordResetSource maps the caller-supplied "source" string to a
+// postgres.ResetSource, defaulting to "web" when unset. "admin" is
+// deliberately rejected here — it exists in the DB enum for admin-initiated
+// resets (e.g. a support tool acting on a user's behalf), which is a
+// privileged action this public, unauthenticated endpoint must never be
+// able to claim for itself; that path belongs to a future admin API that
+// authenticates the caller separately.
+func parsePasswordResetSource(source string) (postgres.ResetSource, bool) {
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "", "web":
+		return postgres.ResetSourceWeb, true
+	case "mobile":
+		return postgres.ResetSourceMobile, true
+	default:
+		return "", false
+	}
+}
+
 // RequestPasswordReset is step 1 of the password-reset flow: if the given
 // email belongs to a usable email/password account, it generates a reset
-// token, stores only its hash, and emails the raw token.
+// token, stores only its hash, and emails the raw token. source records
+// which client initiated the request ("web" or "mobile"; empty defaults to
+// "web") for auditing — see parsePasswordResetSource.
 //
 // The response is ALWAYS the same generic success regardless of whether the
 // email exists, belongs to a deleted/banned/disabled account, or is within
@@ -32,12 +52,19 @@ import (
 // on a password-reset endpoint is a textbook account-enumeration vector, so
 // nothing here may vary the response based on it. Only a genuine
 // validation/internal error is allowed to differ — see the comment below on
-// why that's an acceptable, narrow exception.
-func RequestPasswordReset(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, resendClient *resend.Client, email string) *utils.ErrorDetail {
+// why that's an acceptable, narrow exception. An invalid source value is
+// also allowed to differ (a plain 400): it's a caller bug, not a probe that
+// can reveal anything about an account.
+func RequestPasswordReset(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, resendClient *resend.Client, email, source string) *utils.ErrorDetail {
 	emailParsed := strings.ToLower(strings.TrimSpace(email))
 	if !utils.IsValidEmail(emailParsed) {
 		utils.LogDebug(ctx, "Invalid email format", zap.String("email", emailParsed))
 		return &utils.Errors.InvalidEmailFormat
+	}
+	resetSource, ok := parsePasswordResetSource(source)
+	if !ok {
+		utils.LogDebug(ctx, "Invalid password reset source", zap.String("source", source))
+		return &utils.Errors.InvalidPayload
 	}
 
 	q := postgres.New(db)
@@ -79,7 +106,7 @@ func RequestPasswordReset(ctx context.Context, db *pgxpool.Pool, redisClient *re
 		UserID:     identity.UserID,
 		ResetToken: auth.HashOpaqueToken(rawToken),
 		ExpiresAt:  pgtype.Timestamptz{Time: time.Now().Add(config.Loaded.PasswordResetTTL), Valid: true},
-		Source:     postgres.ResetSourceWeb,
+		Source:     resetSource,
 	}); err != nil {
 		utils.LogError(ctx, "Failed to create password reset record", zap.Error(err))
 		return &utils.Errors.InternalServerError

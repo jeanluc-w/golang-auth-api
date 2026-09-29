@@ -2,8 +2,14 @@ package config
 
 import (
 	"bytes"
+	"encoding/base64"
 	"testing"
 )
+
+// testMFAKey is a valid (32 zero bytes, base64-encoded) MFA_ENCRYPTION_KEY
+// for tests that call Load() — it's a required var, so any such test must
+// set it or Load() fatals the test process outright.
+var testMFAKey = base64.StdEncoding.EncodeToString(make([]byte, 32))
 
 func TestParseListConfig(t *testing.T) {
 	cases := []struct {
@@ -136,6 +142,7 @@ func TestLoad_HappyPath(t *testing.T) {
 	t.Setenv("RESEND_API_KEY", "test-key")
 	t.Setenv("JWT_PRIVATE_KEY_FILE", privFile)
 	t.Setenv("JWT_PUBLIC_KEY_FILE", pubFile)
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAKey)
 	// Everything else left unset to exercise the documented defaults.
 	t.Cleanup(func() { Loaded = nil })
 
@@ -174,6 +181,18 @@ func TestLoad_HappyPath(t *testing.T) {
 	if Loaded.JWTAlgorithm == nil {
 		t.Error("JWTAlgorithm is nil")
 	}
+	if Loaded.MFAIssuer != "auth-api" {
+		t.Errorf("MFAIssuer = %q, want auth-api (default)", Loaded.MFAIssuer)
+	}
+	if len(Loaded.MFAEncryptionKey) != 32 {
+		t.Errorf("MFAEncryptionKey length = %d, want 32", len(Loaded.MFAEncryptionKey))
+	}
+	if Loaded.MFARecoveryCodeCount != 10 {
+		t.Errorf("MFARecoveryCodeCount = %d, want 10 (default)", Loaded.MFARecoveryCodeCount)
+	}
+	if Loaded.GoogleClientID != "" || Loaded.AppleClientID != "" {
+		t.Error("GoogleClientID/AppleClientID should default to empty (SSO unconfigured)")
+	}
 }
 
 func TestLoad_HappyPath_OverridesRespected(t *testing.T) {
@@ -188,6 +207,7 @@ func TestLoad_HappyPath_OverridesRespected(t *testing.T) {
 	t.Setenv("RESEND_API_KEY", "test-key")
 	t.Setenv("JWT_PRIVATE_KEY_FILE", privFile)
 	t.Setenv("JWT_PUBLIC_KEY_FILE", pubFile)
+	t.Setenv("MFA_ENCRYPTION_KEY", testMFAKey)
 	t.Setenv("ENV", "production")
 	t.Setenv("PORT", "9090")
 	t.Setenv("ALLOWED_ORIGINS", "https://a.example.com, https://b.example.com")

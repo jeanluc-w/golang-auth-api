@@ -28,9 +28,18 @@ func NewHandler(svcs *server.Services) http.Handler {
 	router.POST(server.V1_Login, h.LoginHandler)
 	router.POST(server.V1_Logout, h.LogoutHandler)
 	router.POST(server.V1_RefreshToken, h.RefreshTokenHandler)
-	// Password reset APIs
+	// Password reset / change APIs
 	router.POST(server.V1_RequestPasswordReset, h.RequestPasswordResetHandler)
 	router.POST(server.V1_ResetPassword, h.ResetPasswordHandler)
+	router.POST(server.V1_ChangePassword, h.ChangePasswordHandler)
+	// MFA APIs
+	router.POST(server.V1_MFAEnroll, h.MFAEnrollHandler)
+	router.POST(server.V1_MFAVerifyEnrollment, h.MFAVerifyEnrollmentHandler)
+	router.POST(server.V1_MFADisable, h.MFADisableHandler)
+	router.POST(server.V1_MFAVerifyLogin, h.MFAVerifyLoginHandler)
+	// SSO APIs
+	router.POST(server.V1_SSOGoogle, h.SSOGoogleHandler)
+	router.POST(server.V1_SSOApple, h.SSOAppleHandler)
 
 	// Handle httprouter's default NotFound and MethodNotAllowed responses
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

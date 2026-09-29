@@ -172,18 +172,23 @@ func RandomToken(n int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-// GenerateTemporaryJWT issues a short-lived, restricted-scope JWT used
-// between email verification and signup completion. Its role is always
-// "joiner" so it can never be mistaken for (or misused as) a normal access
-// token by VerifyAndParseJWT.
-func GenerateTemporaryJWT(ctx context.Context, redisClient *redis.Client, email string, ttl time.Duration) (string, error) {
+// GenerateTemporaryJWT issues a short-lived, restricted-scope JWT for an
+// intermediate step of some multi-step flow that isn't a full session yet —
+// signup's email-verified-but-not-joined-yet step (role
+// entities.RoleJoiner, subject = the verified email) and login's
+// password-verified-but-MFA-pending step (role entities.RoleMFAPending,
+// subject = the user ID) both use this. role is embedded in the claims
+// specifically so a token minted for one purpose can never be mistaken for
+// (or misused as) either a normal access token or a temporary token from a
+// different flow — see VerifyAndParseTemporaryJWT.
+func GenerateTemporaryJWT(ctx context.Context, redisClient *redis.Client, subject, role string, ttl time.Duration) (string, error) {
 	sessionID := uuid.NewString()
 	now := time.Now()
 	exp := now.Add(ttl)
 	claims := entities.JWTClaims{
-		Role: entities.RoleJoiner,
+		Role: role,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   email,
+			Subject:   subject,
 			Issuer:    jwtIssuer,
 			Audience:  jwt.ClaimStrings{jwtAudience},
 			ID:        sessionID,
@@ -305,15 +310,20 @@ func VerifyAndParseJWT(ctx context.Context, redisClient *redis.Client, authHeade
 	}, nil
 }
 
-// VerifyAndParseTemporaryJWT verifies a temporary ("joiner") JWT issued
-// after email verification, returning the verified email and token ID.
-func VerifyAndParseTemporaryJWT(ctx context.Context, redisClient *redis.Client, authHeader string) (email string, id string, err error) {
+// VerifyAndParseTemporaryJWT verifies a temporary JWT issued by
+// GenerateTemporaryJWT, requiring its role to exactly match wantRole (e.g.
+// entities.RoleJoiner or entities.RoleMFAPending) — a token minted for one
+// temporary-JWT flow must never be accepted by another, even though they
+// share the same underlying mechanism. Returns the claims' subject
+// (meaning depends on wantRole: an email for RoleJoiner, a user ID for
+// RoleMFAPending) and the token/session ID.
+func VerifyAndParseTemporaryJWT(ctx context.Context, redisClient *redis.Client, authHeader, wantRole string) (subject string, id string, err error) {
 	claims, err := parseJWT(authHeader, false)
 	if err != nil {
 		return "", "", err
 	}
 
-	if claims.Subject == "" || claims.ID == "" || claims.Role != entities.RoleJoiner {
+	if claims.Subject == "" || claims.ID == "" || claims.Role != wantRole {
 		return "", "", errors.New("invalid claims")
 	}
 

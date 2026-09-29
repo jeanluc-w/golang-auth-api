@@ -28,6 +28,23 @@ using it for anything real.
   enumeration-resistant (the response never varies based on whether the
   email has an account), and completing a reset revokes every existing
   session on the account, in both Postgres and Redis.
+- **Authenticated password change**, given the current password — unlike a
+  reset, it revokes every *other* session but leaves the one making the
+  request alone.
+- **TOTP-based MFA** (RFC 6238, compatible with Google Authenticator/Authy/
+  1Password/etc.): secrets encrypted at rest (AES-256-GCM, a key never
+  itself stored in the database), constant-time code comparison, anti-replay
+  (a code's time-step can't be reused even within its own validity window),
+  and one-time recovery codes (only their hash is persisted) for when the
+  device is unavailable. Gates login via a short-lived challenge token, not
+  a second password.
+- **SSO (Google, Apple)** via OIDC ID token verification against each
+  provider's live JWKS (signature, issuer, audience, expiry — see
+  `internal/auth/oidc.go`), with a deliberately conservative account-linking
+  policy: an unverified provider email is always rejected, and an email
+  that already has an account under a different identity is rejected as a
+  conflict rather than silently auto-linked. See
+  [Security notes](#security-notes) for the full rationale.
 - **Scheduled maintenance jobs** (`cmd/cron`) that expire old password
   reset tokens/login logs/unverified MFA factors and revoke stale sessions
   — a one-shot binary meant for an external scheduler, not a background
@@ -93,6 +110,15 @@ understand any given flow — they're not thin passthroughs to the DB.
 | POST   | `/auth/v1/refresh-token`            | expired-or-valid access JWT + refresh token in body | Rotate access+refresh tokens |
 | POST   | `/auth/v1/request-password-reset`   | none                   | Email a password reset token, if the account exists and is usable |
 | POST   | `/auth/v1/reset-password`           | reset token in body    | Set a new password and revoke every session on the account |
+| POST   | `/auth/v1/change-password`          | access JWT             | Change password given the current one; revokes every *other* session |
+| POST   | `/auth/v1/mfa/enroll`               | access JWT             | Start TOTP enrollment; returns a secret + QR provisioning URI |
+| POST   | `/auth/v1/mfa/verify`               | access JWT             | Confirm enrollment with a code; activates MFA and returns recovery codes |
+| POST   | `/auth/v1/mfa/disable`              | access JWT + current password | Turn MFA off |
+| POST   | `/auth/v1/mfa/verify-login`         | MFA challenge token in body | Complete an MFA-gated login with a TOTP or recovery code |
+| POST   | `/auth/v1/sso/google`               | none                   | Log in or sign up with a Google ID token |
+| POST   | `/auth/v1/sso/apple`                | none                   | Log in or sign up with an Apple identity token |
+
+A `login` response for an MFA-enabled account is `{"mfa_required": true, "challenge_token": "..."}` instead of tokens — submit that token plus a code to `mfa/verify-login` to actually complete the login.
 
 All error responses are `{"error": "<code>", "message": "<human text>"}`
 with an appropriate HTTP status; see `internal/utils/error_codes.go` for the
@@ -181,6 +207,10 @@ authoritative list; `.copy.env` has a template with comments).
 | `LOGIN_LOCK_DURATION_MINUTES` | no | `15` | how long a lockout lasts |
 | `PASSWORD_RESET_TOKEN_TTL_MINUTES` | no | `30` | how long a reset token/link stays valid |
 | `PASSWORD_RESET_URL` | no | empty | frontend reset-password page; if set, the reset email links to `<this>?token=<raw token>`; if empty, the email states the raw token instead |
+| `MFA_ENCRYPTION_KEY` | yes | — | 32 raw bytes, base64-encoded (`openssl rand -base64 32`); encrypts TOTP secrets at rest (AES-256-GCM) |
+| `MFA_ISSUER` | no | `auth-api` | name shown in authenticator apps next to the account |
+| `GOOGLE_CLIENT_ID` | no | empty | enables `POST /auth/v1/sso/google` when set |
+| `APPLE_CLIENT_ID` | no | empty | enables `POST /auth/v1/sso/apple` when set |
 | `SENTRY_SAMPLE_RATE` | no | `1.0` | |
 
 ### Password peppers
@@ -275,6 +305,55 @@ Written for someone reviewing this as a reference, not just using it — the
   sequence runs in one transaction (`postgres.CompletePasswordReset`) so a
   crash mid-reset can't leave the token consumed without the password
   actually changing.
+- **Changing your password only revokes *other* sessions**
+  (`postgres.CompletePasswordChange` / `RevokeAllOtherUserSessions`),
+  deliberately unlike a reset: the caller already re-proved their identity
+  with the current password in this very request, so there's no reason to
+  also sign out the device making it. A reset has no such proof (the emailed
+  token is the only credential involved), so it revokes everything.
+  Attempting to "change" to the same password is rejected outright
+  (`new_password_matches_current`) rather than silently no-op'd.
+- **MFA secrets are encrypted at rest, not just access-controlled**
+  (`auth.EncryptMFASecret`, AES-256-GCM, key in `MFA_ENCRYPTION_KEY` — never
+  in the database, same principle as password peppers). Unlike a password,
+  a TOTP secret can't be hashed: verifying a code requires the plaintext
+  back, so a stolen DB dump must not be enough on its own to generate valid
+  codes for every enrolled account.
+- **MFA codes can't be replayed within their own validity window** —
+  `mfa_factors.last_used_step` records the exact 30-second time-step a code
+  last succeeded on, and `auth.ValidateTOTPCode` rejects that step (and
+  anything before it) even though the code itself would otherwise still be
+  cryptographically valid for the rest of that window. Recovery codes are
+  single-use for the same reason, tracked via `used_at` rather than a step.
+- **MFA disable requires the current password**, not just a valid session —
+  turning off a security control must not be possible with a stolen/replayed
+  access token alone, since an attacker holding one still doesn't know the
+  password.
+- **SSO account-linking is deliberately conservative** (`services.SSOLogin`):
+  an ID token whose `email_verified` claim is false is refused outright,
+  whether the flow would have created a new account or logged into an
+  existing one — an SSO login is only ever as trustworthy as the provider's
+  own claim that the caller controls that email. And when a *verified*
+  email already has an account under a different identity (a different SSO
+  provider, or email/password), this service refuses that too
+  (`sso_account_conflict`) rather than silently merging the two accounts.
+  Auto-linking on a verified-email match is a legitimate, common choice
+  other products make — it's just a product decision this repo didn't want
+  to make silently on your behalf, since merging accounts without an
+  explicit action from the user on either side is the kind of thing that's
+  much easier to get subtly wrong than it looks. A "connect this provider
+  while already authenticated" flow is the natural way to let a user
+  perform that link deliberately; it isn't implemented here (see
+  [Not implemented](#not-implemented)).
+- **SSO ID tokens are verified against each provider's live, cached JWKS**
+  (`internal/auth/oidc.go`, via
+  [`keyfunc`](https://github.com/MicahParks/keyfunc) rather than hand-rolled
+  JWK parsing/rotation) — signature, issuer, audience (your
+  `GOOGLE_CLIENT_ID`/`APPLE_CLIENT_ID`), and expiry are all checked before
+  any claim in the token is trusted. Apple's identity tokens send
+  `email_verified` as the JSON *string* `"true"`/`"false"` rather than a
+  JSON boolean (a real, documented quirk); `auth.VerifyOIDCToken` handles
+  both encodings rather than only the spec-correct one.
 - **Dependencies are scanned with [`govulncheck`](https://go.dev/blog/vuln)**
   in CI (and via `make vulncheck` locally), which does call-graph analysis
   rather than flagging every CVE in every transitive dependency regardless
@@ -287,30 +366,29 @@ Written for someone reviewing this as a reference, not just using it — the
 ## Not implemented
 
 The database schema (`db/migrations/001_init.up.sql`) already has tables for
-several features the API doesn't expose yet — they were designed for, not
+a few features the API still doesn't expose — they were designed for, not
 retrofitted:
 
-- **MFA** (`mfa_factors` table: TOTP/SMS/email factors, with a trigger
-  preventing more than one TOTP factor per user)
-- **SSO** (`auth_identities.provider` already supports `google`/`apple`
-  alongside `email`; only the `email` provider has a working code path)
+- **MFA via SMS or email** (`mfa_factors.type` supports them, and the
+  `UNIQUE(user_id, type)` constraint means a user could have one of each
+  alongside TOTP) — TOTP is the only type with a working code path. SMS
+  needs a paid provider integration (Twilio et al.) this repo deliberately
+  doesn't take a dependency on; email MFA would reuse the existing
+  Resend/template plumbing but is a meaningfully weaker factor (same inbox
+  as password reset) and wasn't worth adding just to say two exist.
 - **Admin actions** (`audit_logs` table, `moderator`/`admin` roles, and
   triggers preventing admin deletion/demotion are all in place; there's no
   admin API surface yet)
-- **Change password while authenticated** — password reset (forgotten
-  password, unauthenticated) is implemented; changing your password from a
-  logged-in session with your current password is not, though it would
-  reuse most of the same pieces (`auth.HashPasswordPHC`,
-  `postgres.UpdatePasswordHash`, session revocation).
+- **Linking an additional SSO provider (or email/password) to an
+  already-authenticated account** — `services.SSOLogin` currently rejects
+  an SSO login whose email already has an account under a different
+  identity (`SSOAccountConflict`) rather than linking it, specifically
+  because there's no such flow yet for the user to authorize that link
+  themselves. See [Security notes](#security-notes) for the full reasoning.
 
-Password reset and the scheduled maintenance jobs (`cmd/cron`) — previously
-listed here as schema-only, unimplemented pieces — are now implemented; see
-[Security notes](#security-notes) and
-[Maintenance / cron jobs](#maintenance--cron-jobs) respectively.
-
-If you build on this repo, the remaining items above are the natural next
-pieces — the schema, audit triggers, and error-code registry were already
-shaped with them in mind.
+If you build on this repo, the items above are the natural next pieces —
+the schema, audit triggers, and error-code registry were already shaped
+with them in mind.
 
 ## Testing
 
@@ -346,6 +424,17 @@ just end-to-end.
 assert on log output and a slow handler to trigger the timeout — no Docker
 or real server needed for either.
 
+MFA's crypto core (`internal/auth/mfa_encryption.go`, `mfa_totp.go`) and SSO's
+token verification (`internal/auth/oidc.go`) are also fully unit-tested with
+no Postgres/Redis/Docker: AES-GCM round-trip/tamper/wrong-key cases for
+secret encryption; TOTP code generation, ±1-step clock-drift tolerance, and
+same-step replay rejection using real `pquerna/otp` codes; and OIDC
+verification against a real, locally-generated RSA keypair served from a
+fake JWKS `httptest.Server` (same "redirect at a local server" trick used
+for Resend) — covering wrong audience, wrong issuer, expired, tampered, and
+untrusted-signing-key rejection, plus Apple's `email_verified`-as-a-JSON-
+string quirk.
+
 ### Integration tests
 
 Exercise the real signup → login → refresh → logout lifecycle (lockout,
@@ -353,12 +442,24 @@ refresh-token reuse detection, pepper-rotation rehashing, and
 `StartEmailVerification`'s email-taken/regen-window logic), the full
 password-reset flow (enumeration-resistance, cooldown, expired/reused/unknown
 tokens, and that a reset actually revokes every prior session in both
-Postgres and Redis — `password_reset_test.go`), and all six
+Postgres and Redis — `password_reset_test.go`), authenticated password
+change (`change_password_test.go`), the full MFA lifecycle (enroll → verify
+→ MFA-gated login via TOTP or a recovery code → disable, plus wrong-code and
+wrong-password rejection — `mfa_test.go`), SSO's account-linking policy
+(new account, existing login, email-not-verified, email-conflict across
+providers, username-collision suffixing — `sso_test.go`), and all six
 `RunMaintenance` cleanup jobs seeded with backdated rows so each cutoff is
 tested precisely (`maintenance_test.go`) — all against real Postgres and
 Redis via [testcontainers-go](https://golang.testcontainers.org/). Requires
 a working Docker (or Podman, via testcontainers' compatibility mode)
 daemon.
+
+SSO's integration tests call `services.SSOLogin` with already-verified
+`auth.OIDCClaims` directly rather than real ID tokens — token
+signature/issuer/audience verification is the crypto-sensitive part and is
+already covered in detail at the unit level (above) with no need for
+Postgres; what's actually DB-dependent, and what these tests cover, is the
+account-linking/conflict/creation policy layered on top of it.
 
 This is also the **only** layer that drives requests through the real HTTP
 stack — `internal/handlers`, `internal/services`, `internal/db/postgres`,

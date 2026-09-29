@@ -42,7 +42,7 @@ func signUpTestUser(t *testing.T, ctx context.Context, email, username, password
 		t.Fatalf("VerifyEmailCode: %+v", errDetail)
 	}
 
-	gotEmail, jti, err := auth.VerifyAndParseTemporaryJWT(ctx, testRedis, "Bearer "+verifyResult.Token)
+	gotEmail, jti, err := auth.VerifyAndParseTemporaryJWT(ctx, testRedis, "Bearer "+verifyResult.Token, entities.RoleJoiner)
 	if err != nil {
 		t.Fatalf("VerifyAndParseTemporaryJWT: %v", err)
 	}

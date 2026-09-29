@@ -11,8 +11,10 @@ import (
 )
 
 // LoginHandler authenticates an email/password pair (POST /auth/v1/login,
-// an open route) and returns a new access + refresh token pair. See
-// services.Login for the lockout and timing-safety behavior.
+// an open route) and returns a new access + refresh token pair — or, for an
+// MFA-enabled account, a challenge token to submit to
+// MFAVerifyLoginHandler instead. See services.Login for the lockout,
+// timing-safety, and MFA-gating behavior.
 func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Processing LoginHandler flow")
@@ -28,6 +30,16 @@ func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request, _ httpro
 	result, err := services.Login(ctx, h.Svcs.DB, h.Svcs.RedisClient, payload.Email, payload.Password)
 	if err != nil {
 		utils.JSONError(w, *err)
+		return
+	}
+
+	if result.MFARequired {
+		utils.LogInfo(ctx, "Login password verified; MFA required")
+		utils.JSONResponse(w, http.StatusOK, map[string]any{
+			"message":         "MFA verification required",
+			"mfa_required":    true,
+			"challenge_token": result.MFAChallengeToken,
+		})
 		return
 	}
 

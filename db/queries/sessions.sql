@@ -43,3 +43,14 @@ WHERE user_id = sqlc.arg(user_id) AND revoked = FALSE;
 UPDATE sessions
 SET revoked = TRUE, revoked_at = now()
 WHERE user_id = sqlc.arg(user_id) AND revoked = FALSE;
+
+-- name: RevokeAllOtherUserSessions :exec
+-- Like RevokeAllUserSessions but keeps one session (the caller's current
+-- one) alive — used after an authenticated change-password, where the
+-- point is "log out everywhere else", not "log the user out of the request
+-- they just made".
+UPDATE sessions
+SET revoked = TRUE, revoked_at = now()
+WHERE user_id = sqlc.arg(user_id)
+  AND id != sqlc.arg(current_session_id)
+  AND revoked = FALSE;

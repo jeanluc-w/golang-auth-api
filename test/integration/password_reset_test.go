@@ -48,7 +48,7 @@ func TestRequestPasswordReset_HappyPath(t *testing.T) {
 	signUpTestUser(t, ctx, email, "resetreqhappy", "correct horse battery staple")
 	fakeResend, callCount := newFakeResendClient(t, http.StatusOK)
 
-	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, email); errDetail != nil {
+	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, email, "web"); errDetail != nil {
 		t.Fatalf("RequestPasswordReset: %+v", errDetail)
 	}
 	if callCount.Load() != 1 {
@@ -64,7 +64,7 @@ func TestRequestPasswordReset_UnknownEmail_SameResponse(t *testing.T) {
 	ctx := context.Background()
 	fakeResend, callCount := newFakeResendClient(t, http.StatusOK)
 
-	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, uniqueEmail(t)); errDetail != nil {
+	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, uniqueEmail(t), "web"); errDetail != nil {
 		t.Fatalf("RequestPasswordReset for unknown email should return nil (generic success), got: %+v", errDetail)
 	}
 	if callCount.Load() != 0 {
@@ -78,10 +78,10 @@ func TestRequestPasswordReset_Cooldown(t *testing.T) {
 	signUpTestUser(t, ctx, email, "resetreqcooldown", "correct horse battery staple")
 	fakeResend, callCount := newFakeResendClient(t, http.StatusOK)
 
-	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, email); errDetail != nil {
+	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, email, "web"); errDetail != nil {
 		t.Fatalf("first RequestPasswordReset: %+v", errDetail)
 	}
-	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, email); errDetail != nil {
+	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, email, "web"); errDetail != nil {
 		t.Fatalf("second (cooldown) RequestPasswordReset should still return nil, got: %+v", errDetail)
 	}
 	if callCount.Load() != 1 {
@@ -93,8 +93,49 @@ func TestRequestPasswordReset_InvalidEmailFormat(t *testing.T) {
 	ctx := context.Background()
 	fakeResend, _ := newFakeResendClient(t, http.StatusOK)
 
-	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, "not-an-email"); errDetail == nil {
+	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, "not-an-email", "web"); errDetail == nil {
 		t.Fatal("expected an error for a malformed email")
+	}
+}
+
+func TestRequestPasswordReset_MobileSource(t *testing.T) {
+	ctx := context.Background()
+	email := uniqueEmail(t)
+	signup := signUpTestUser(t, ctx, email, "resetreqmobile", "correct horse battery staple")
+	fakeResend, callCount := newFakeResendClient(t, http.StatusOK)
+
+	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, email, "mobile"); errDetail != nil {
+		t.Fatalf("RequestPasswordReset: %+v", errDetail)
+	}
+	if callCount.Load() != 1 {
+		t.Errorf("fake email server received %d requests, want 1", callCount.Load())
+	}
+
+	var source string
+	if err := testDB.QueryRow(ctx, `SELECT source::text FROM password_resets WHERE user_id = $1`, userUUID(t, signup.UserID)).Scan(&source); err != nil {
+		t.Fatalf("querying stored source: %v", err)
+	}
+	if source != "mobile" {
+		t.Errorf("stored source = %q, want %q", source, "mobile")
+	}
+}
+
+func TestRequestPasswordReset_InvalidSource_StillGeneric(t *testing.T) {
+	ctx := context.Background()
+	fakeResend, callCount := newFakeResendClient(t, http.StatusOK)
+
+	// An invalid source is a caller bug, not an enumeration probe, so it's
+	// fine (and expected) for it to return a distinct error — see
+	// parsePasswordResetSource's doc comment. This just locks in that
+	// "admin" specifically is rejected from this public endpoint.
+	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, uniqueEmail(t), "admin"); errDetail == nil {
+		t.Error("expected source=admin to be rejected on the public request-reset endpoint")
+	}
+	if errDetail := services.RequestPasswordReset(ctx, testDB, testRedis, fakeResend, uniqueEmail(t), "carrier-pigeon"); errDetail == nil {
+		t.Error("expected an unrecognized source value to be rejected")
+	}
+	if callCount.Load() != 0 {
+		t.Errorf("expected no email to be sent for a rejected source, got %d calls", callCount.Load())
 	}
 }
 

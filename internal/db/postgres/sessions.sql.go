@@ -115,6 +115,28 @@ func (q *Queries) ListActiveSessionIDs(ctx context.Context, userID pgtype.UUID) 
 	return items, nil
 }
 
+const revokeAllOtherUserSessions = `-- name: RevokeAllOtherUserSessions :exec
+UPDATE sessions
+SET revoked = TRUE, revoked_at = now()
+WHERE user_id = $1
+  AND id != $2
+  AND revoked = FALSE
+`
+
+type RevokeAllOtherUserSessionsParams struct {
+	UserID           pgtype.UUID
+	CurrentSessionID pgtype.UUID
+}
+
+// Like RevokeAllUserSessions but keeps one session (the caller's current
+// one) alive — used after an authenticated change-password, where the
+// point is "log out everywhere else", not "log the user out of the request
+// they just made".
+func (q *Queries) RevokeAllOtherUserSessions(ctx context.Context, arg RevokeAllOtherUserSessionsParams) error {
+	_, err := q.db.Exec(ctx, revokeAllOtherUserSessions, arg.UserID, arg.CurrentSessionID)
+	return err
+}
+
 const revokeAllUserSessions = `-- name: RevokeAllUserSessions :exec
 UPDATE sessions
 SET revoked = TRUE, revoked_at = now()

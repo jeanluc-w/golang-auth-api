@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/resend/resend-go/v2"
@@ -24,6 +25,13 @@ type Services struct {
 	ResendClient *resend.Client
 	Limiter      *limiter.Limiter
 	Logger       *zap.Logger
+	// GoogleJWKS/AppleJWKS are nil when that provider's *_CLIENT_ID isn't
+	// configured, or its JWKS couldn't be fetched at startup — the SSO
+	// handlers treat a nil Keyfunc as "this provider isn't available" and
+	// respond accordingly, rather than the whole server failing to start
+	// over an optional, best-effort-configured feature.
+	GoogleJWKS keyfunc.Keyfunc
+	AppleJWKS  keyfunc.Keyfunc
 }
 
 // NewServices constructs a Services bundle from already-initialized clients.
@@ -33,9 +41,12 @@ func NewServices(
 	resend *resend.Client,
 	lim *limiter.Limiter,
 	logger *zap.Logger,
+	googleJWKS keyfunc.Keyfunc,
+	appleJWKS keyfunc.Keyfunc,
 ) *Services {
 	return &Services{
 		DB: db, RedisClient: redis, ResendClient: resend, Limiter: lim, Logger: logger,
+		GoogleJWKS: googleJWKS, AppleJWKS: appleJWKS,
 	}
 }
 

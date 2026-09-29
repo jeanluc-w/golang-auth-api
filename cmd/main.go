@@ -6,14 +6,17 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/MicahParks/keyfunc/v3"
 	"github.com/getsentry/sentry-go"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/resend/resend-go/v2"
 	"github.com/ulule/limiter/v3"
 	redisstore "github.com/ulule/limiter/v3/drivers/store/redis"
+	"go.uber.org/zap"
 
 	"auth-api/config"
+	"auth-api/internal/auth"
 	"auth-api/internal/handlers"
 	"auth-api/internal/server"
 )
@@ -62,8 +65,15 @@ func main() {
 	logger := config.InitLogger(config.Loaded.Env)
 	defer logger.Sync()
 
+	// SSO providers are optional: a missing client ID or an unreachable
+	// JWKS endpoint at startup disables just that provider (nil Keyfunc,
+	// checked by the SSO handlers) rather than failing the whole server —
+	// see server.Services' doc comment.
+	googleJWKS := newProviderKeyfuncOrNil(config.Loaded.GoogleClientID, auth.GoogleJWKSURL, logger)
+	appleJWKS := newProviderKeyfuncOrNil(config.Loaded.AppleClientID, auth.AppleJWKSURL, logger)
+
 	// Establish 3rd Party services so handlers/services can use them
-	services := server.NewServices(pgPool, redisClient, resendClient, limiterInstance, logger)
+	services := server.NewServices(pgPool, redisClient, resendClient, limiterInstance, logger, googleJWKS, appleJWKS)
 
 	// Build the full application handler: routes + middleware stack
 	handler := handlers.NewHandler(services)
@@ -79,4 +89,19 @@ func main() {
 
 	// Start with graceful shutdown
 	server.Start(srv, 15*time.Second)
+}
+
+// newProviderKeyfuncOrNil builds a keyfunc.Keyfunc for an SSO provider's
+// JWKS, or returns nil if clientID is unset (provider not configured) or
+// the initial fetch fails (logged, not fatal — see the call site's comment).
+func newProviderKeyfuncOrNil(clientID, jwksURL string, logger *zap.Logger) keyfunc.Keyfunc {
+	if clientID == "" {
+		return nil
+	}
+	kf, err := auth.NewProviderKeyfunc(context.Background(), jwksURL)
+	if err != nil {
+		logger.Error("Failed to fetch JWKS for configured SSO provider; that provider will be unavailable", zap.String("jwks_url", jwksURL), zap.Error(err))
+		return nil
+	}
+	return kf
 }

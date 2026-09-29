@@ -64,7 +64,7 @@ func JWTMiddleware(redisClient *redis.Client) func(http.Handler) http.Handler {
 
 			// Temporary JWT Routes: Verify the Temporary JWT with different rules if the
 			if isAlternateRoute(requestPath, server.TemporaryJWTRoutes) {
-				email, id, err := auth.VerifyAndParseTemporaryJWT(ctx, redisClient, authHeader)
+				email, id, err := auth.VerifyAndParseTemporaryJWT(ctx, redisClient, authHeader, entities.RoleJoiner)
 				if err != nil {
 					utils.LogDebug(ctx, "Temporary JWT validation failed", zap.Error(err))
 					utils.JSONError(w, utils.Errors.Unauthorized)

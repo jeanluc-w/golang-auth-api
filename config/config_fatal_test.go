@@ -80,3 +80,20 @@ func TestLoadPrivateKey_FatalOnWrongKeyType(t *testing.T) {
 	err := runCrasherSubprocess(t, "TestLoadPrivateKey_FatalOnWrongKeyType", "TEST_KEY_FILE="+wrongTypeFile)
 	assertExitedNonZero(t, err)
 }
+
+// TestLoadMFAEncryptionKey_FatalOnBadInput covers loadMFAEncryptionKey's two
+// fatal branches (not valid base64; valid base64 but the wrong decoded
+// length for AES-256) as one subprocess shape, since both are "reject a
+// malformed key before ever trying to use it for encryption" rather than
+// meaningfully distinct failure modes worth separate subprocess spawns.
+func TestLoadMFAEncryptionKey_FatalOnBadInput(t *testing.T) {
+	if os.Getenv(beCrasherEnv) == "1" {
+		loadMFAEncryptionKey(os.Getenv("TEST_MFA_KEY"))
+		return
+	}
+
+	for _, badKey := range []string{"not-valid-base64!!!", "dG9vLXNob3J0"} { // "too-short" base64-encoded, decodes to 9 bytes
+		err := runCrasherSubprocess(t, "TestLoadMFAEncryptionKey_FatalOnBadInput", "TEST_MFA_KEY="+badKey)
+		assertExitedNonZero(t, err)
+	}
+}

@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/ed25519"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"log"
 	"os"
@@ -41,6 +42,12 @@ type Config struct {
 	LoginLockDuration      time.Duration
 	PasswordResetTTL       time.Duration
 	PasswordResetURL       string
+	MFAEncryptionKey       []byte
+	MFAIssuer              string
+	MFAChallengeTTL        time.Duration
+	MFARecoveryCodeCount   int
+	GoogleClientID         string
+	AppleClientID          string
 	JWTPrivateKey          ed25519.PrivateKey
 	JWTPublicKey           ed25519.PublicKey
 	JWTAlgorithm           jwt.SigningMethod
@@ -87,10 +94,38 @@ func Load() {
 		// the email just states the token itself for the client to use
 		// however it needs to (deep link, manual entry, etc).
 		PasswordResetURL: getStringConfig("PASSWORD_RESET_URL", ""),
-		JWTPrivateKey:    loadPrivateKey(requireStringConfig("JWT_PRIVATE_KEY_FILE")),
-		JWTPublicKey:     loadPublicKey(requireStringConfig("JWT_PUBLIC_KEY_FILE")),
-		JWTAlgorithm:     jwt.SigningMethodEdDSA,
+		// TOTP secrets are symmetric and must be decrypted (not just
+		// hashed) to verify a code, so a DB dump alone must not be enough
+		// to read them — same rationale as password peppers, but AES-GCM
+		// here since we need the plaintext back, not just a comparison.
+		MFAEncryptionKey:     loadMFAEncryptionKey(requireStringConfig("MFA_ENCRYPTION_KEY")),
+		MFAIssuer:            getStringConfig("MFA_ISSUER", "auth-api"),
+		MFAChallengeTTL:      5 * time.Minute,
+		MFARecoveryCodeCount: 10,
+		// Optional: unset means that SSO provider's endpoints respond with a
+		// clear "not configured" error instead of the service failing to
+		// start. Forcing every fork of this repo to have real Google/Apple
+		// OAuth credentials just to boot would defeat the point of it being
+		// a reference implementation.
+		GoogleClientID: getStringConfig("GOOGLE_CLIENT_ID", ""),
+		AppleClientID:  getStringConfig("APPLE_CLIENT_ID", ""),
+		JWTPrivateKey:  loadPrivateKey(requireStringConfig("JWT_PRIVATE_KEY_FILE")),
+		JWTPublicKey:   loadPublicKey(requireStringConfig("JWT_PUBLIC_KEY_FILE")),
+		JWTAlgorithm:   jwt.SigningMethodEdDSA,
 	}
+}
+
+// loadMFAEncryptionKey decodes a base64-encoded 32-byte (256-bit) AES key
+// used to encrypt TOTP secrets at rest.
+func loadMFAEncryptionKey(raw string) []byte {
+	key, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		log.Fatalf("MFA_ENCRYPTION_KEY is not valid base64: %v", err)
+	}
+	if len(key) != 32 {
+		log.Fatalf("MFA_ENCRYPTION_KEY must decode to exactly 32 bytes (AES-256), got %d", len(key))
+	}
+	return key
 }
 
 // Parses a float from env or fallback, fatals if invalid

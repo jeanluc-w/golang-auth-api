@@ -417,6 +417,15 @@ type MfaFactor struct {
 	FailedAttempts       pgtype.Int4
 	LastUsedAt           pgtype.Timestamptz
 	Revoked              pgtype.Bool
+	LastUsedStep         pgtype.Int8
+}
+
+type MfaRecoveryCode struct {
+	ID        pgtype.UUID
+	FactorID  pgtype.UUID
+	CodeHash  string
+	UsedAt    pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
 }
 
 type PasswordReset struct {

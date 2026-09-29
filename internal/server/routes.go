@@ -10,10 +10,13 @@ const (
 	V1_RefreshToken           string = "/auth/v1/refresh-token"
 	V1_RequestPasswordReset   string = "/auth/v1/request-password-reset"
 	V1_ResetPassword          string = "/auth/v1/reset-password"
-	// Not yet implemented — the DB schema (mfa_factors table) already
-	// supports it; see the README's "Not implemented" section.
-	// Change Password (while authenticated, as opposed to a forgotten-password reset)
-	// SSO
+	V1_ChangePassword         string = "/auth/v1/change-password"
+	V1_MFAEnroll              string = "/auth/v1/mfa/enroll"
+	V1_MFAVerifyEnrollment    string = "/auth/v1/mfa/verify"
+	V1_MFADisable             string = "/auth/v1/mfa/disable"
+	V1_MFAVerifyLogin         string = "/auth/v1/mfa/verify-login"
+	V1_SSOGoogle              string = "/auth/v1/sso/google"
+	V1_SSOApple               string = "/auth/v1/sso/apple"
 )
 
 // Routes where JWT validation isn't needed
@@ -24,6 +27,14 @@ var OpenRoutes = []string{
 	V1_Login,
 	V1_RequestPasswordReset,
 	V1_ResetPassword,
+	// MFAVerifyLogin is unauthenticated-by-access-token on purpose: the
+	// caller doesn't have a full session yet (that's the whole point — MFA
+	// gates issuing one). It authenticates itself via the short-lived
+	// mfa_pending challenge token carried in its own request body instead
+	// of the Authorization header; see services.VerifyMFALogin.
+	V1_MFAVerifyLogin,
+	V1_SSOGoogle,
+	V1_SSOApple,
 }
 
 // Routes where only Temporary JWTs are allowed (essentially sign-ups)

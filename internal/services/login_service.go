@@ -9,6 +9,7 @@ import (
 	"auth-api/config"
 	"auth-api/internal/auth"
 	"auth-api/internal/db/postgres"
+	"auth-api/internal/entities"
 	"auth-api/internal/utils"
 
 	"github.com/jackc/pgx/v5"
@@ -23,6 +24,13 @@ type LoginResult struct {
 	RefreshToken string
 	UserID       string
 	Username     string
+	// MFARequired is true when the password was correct but the account
+	// has MFA enabled: AccessToken/RefreshToken/UserID/Username are all
+	// empty in that case, and MFAChallengeToken must be submitted (along
+	// with a TOTP or recovery code) to services.VerifyMFALogin to actually
+	// complete the login.
+	MFARequired       bool
+	MFAChallengeToken string
 }
 
 // Login authenticates an email/password pair, applies failed-attempt
@@ -106,13 +114,36 @@ func Login(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, ema
 	if err := q.ResetFailedLoginAttempts(ctx, identity.IdentityID); err != nil {
 		utils.LogWarn(ctx, "ResetFailedLoginAttempts failed", zap.Error(err))
 	}
-	if err := q.TouchUserLastLogin(ctx, identity.UserID); err != nil {
-		utils.LogWarn(ctx, "TouchUserLastLogin failed", zap.Error(err))
+
+	// MFA gate: a correct password alone isn't enough to finish logging in
+	// on an MFA-enabled account. GetTOTPFactorByUserID erroring for any
+	// reason OTHER than "no such row" is treated as an internal error that
+	// FAILS THE LOGIN, not as "assume MFA is off" — an attacker able to
+	// somehow make this one lookup error out must not be able to use that
+	// to skip MFA. Don't relax this without a very good reason.
+	mfaFactor, mfaErr := q.GetTOTPFactorByUserID(ctx, identity.UserID)
+	switch {
+	case mfaErr == nil && mfaFactor.Enabled.Bool:
+		challengeToken, err := auth.GenerateTemporaryJWT(ctx, redisClient, identity.UserID.String(), entities.RoleMFAPending, config.Loaded.MFAChallengeTTL)
+		if err != nil {
+			utils.LogError(ctx, "Failed to generate MFA challenge token", zap.Error(err))
+			return nil, &utils.Errors.InternalServerError
+		}
+		recordLoginAttempt(ctx, q, identity.UserID, identity.IdentityID, postgres.LoginResultMfaRequired, ip, ua)
+		utils.LogInfo(ctx, "Login password verified; MFA challenge issued", zap.String("user_id", identity.UserID.String()))
+		return &LoginResult{MFARequired: true, MFAChallengeToken: challengeToken}, nil
+	case mfaErr != nil && !errors.Is(mfaErr, pgx.ErrNoRows):
+		utils.LogError(ctx, "GetTOTPFactorByUserID failed", zap.Error(mfaErr))
+		return nil, &utils.Errors.InternalServerError
 	}
+	// Otherwise: pgx.ErrNoRows (never enrolled) or a factor exists but
+	// isn't enabled (abandoned enrollment) — proceed as a normal login.
 
 	// Transparently upgrade the stored hash if it used retired argon2
-	// params or a rotated-out pepper. Best-effort: failure here shouldn't
-	// block the login that already succeeded.
+	// params or a rotated-out pepper. Only possible here (not in
+	// VerifyMFALogin) since it needs the plaintext password, which an
+	// MFA-gated login's second step never sees. Best-effort: failure
+	// here shouldn't block the login that already succeeded.
 	if shouldRehash, err := auth.ShouldRehashActive(identity.PasswordHash.String); err != nil {
 		utils.LogWarn(ctx, "ShouldRehashActive failed", zap.Error(err))
 	} else if shouldRehash {
@@ -126,13 +157,26 @@ func Login(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, ema
 		}
 	}
 
-	userIDStr := identity.UserID.String()
+	return issueLoginSession(ctx, redisClient, q, identity.UserID, identity.IdentityID, identity.Username, identity.Role, ip, ua)
+}
+
+// issueLoginSession is the common tail end of a successful login, shared by
+// Login (password-only accounts, or once MFA is confirmed not required) and
+// VerifyMFALogin (once the MFA challenge is confirmed). It touches
+// last_login, issues a new access/refresh token pair, persists the refresh
+// session, and records the successful attempt.
+func issueLoginSession(ctx context.Context, redisClient *redis.Client, q *postgres.Queries, userID, identityID pgtype.UUID, username string, role postgres.UserRole, ip, ua string) (*LoginResult, *utils.ErrorDetail) {
+	if err := q.TouchUserLastLogin(ctx, userID); err != nil {
+		utils.LogWarn(ctx, "TouchUserLastLogin failed", zap.Error(err))
+	}
+
+	userIDStr := userID.String()
 	tokens, err := auth.GenerateUserTokens(
 		ctx,
 		redisClient,
 		userIDStr,
-		identity.Username,
-		string(identity.Role),
+		username,
+		string(role),
 		config.Loaded.AccessTTL,
 		config.Loaded.RefreshTTL,
 	)
@@ -144,7 +188,7 @@ func Login(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, ema
 	refreshHash := auth.HashOpaqueToken(tokens.RefreshToken)
 	_, err = postgres.CreateRefreshSession(ctx, q, postgres.RefreshSessionInput{
 		SessionID:        tokens.SessionID,
-		UserID:           identity.UserID,
+		UserID:           userID,
 		ExpiresAt:        tokens.RefreshExp,
 		RefreshTokenHash: refreshHash,
 		IP:               ip,
@@ -156,14 +200,14 @@ func Login(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, ema
 		return nil, &utils.Errors.TokenGenerationFailed
 	}
 
-	recordLoginAttempt(ctx, q, identity.UserID, identity.IdentityID, postgres.LoginResultSuccess, ip, ua)
+	recordLoginAttempt(ctx, q, userID, identityID, postgres.LoginResultSuccess, ip, ua)
 	utils.LogInfo(ctx, "Login successful", zap.String("user_id", userIDStr))
 
 	return &LoginResult{
 		AccessToken:  tokens.AccessToken,
 		RefreshToken: tokens.RefreshToken,
 		UserID:       userIDStr,
-		Username:     identity.Username,
+		Username:     username,
 	}, nil
 }
 

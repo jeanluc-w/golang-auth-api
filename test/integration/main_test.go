@@ -16,6 +16,7 @@ package integration
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -138,6 +139,11 @@ func configureTestConfig() {
 	if err != nil {
 		panic(err)
 	}
+	mfaKey := make([]byte, 32)
+	if _, err := rand.Read(mfaKey); err != nil {
+		panic(err)
+	}
+
 	config.Loaded = &config.Config{
 		Env:                    "test",
 		PasswordPeppersRaw:     "test-active:MDEyMzQ1Njc4OWFiY2RlZg==,test-legacy:ZmVkY2JhOTg3NjU0MzIxMA==",
@@ -151,6 +157,11 @@ func configureTestConfig() {
 		TemporaryTokenTTL:      time.Minute,
 		LoginMaxFailedAttempts: 3,
 		LoginLockDuration:      2 * time.Second,
+		PasswordResetTTL:       10 * time.Minute,
+		MFAEncryptionKey:       mfaKey,
+		MFAIssuer:              "auth-api-test",
+		MFAChallengeTTL:        time.Minute,
+		MFARecoveryCodeCount:   10,
 		JWTPrivateKey:          priv,
 		JWTPublicKey:           pub,
 		JWTAlgorithm:           jwt.SigningMethodEdDSA,

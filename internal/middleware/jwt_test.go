@@ -135,7 +135,7 @@ func TestJWTMiddleware_TemporaryJWTRoute(t *testing.T) {
 	})
 	handler := JWTMiddleware(rdb)(next)
 
-	token, err := auth.GenerateTemporaryJWT(context.Background(), rdb, "joiner@example.com", time.Hour)
+	token, err := auth.GenerateTemporaryJWT(context.Background(), rdb, "joiner@example.com", entities.RoleJoiner, time.Hour)
 	if err != nil {
 		t.Fatalf("GenerateTemporaryJWT: %v", err)
 	}

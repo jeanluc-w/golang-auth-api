@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"sync"
 	"testing"
 
@@ -25,6 +26,10 @@ func setTestConfig(t *testing.T, peppersRaw, activePepperID string) {
 	if err != nil {
 		t.Fatalf("ed25519.GenerateKey: %v", err)
 	}
+	mfaKey := make([]byte, 32)
+	if _, err := rand.Read(mfaKey); err != nil {
+		t.Fatalf("rand.Read: %v", err)
+	}
 	config.Loaded = &config.Config{
 		Env:                "test",
 		PasswordPeppersRaw: peppersRaw,
@@ -32,6 +37,8 @@ func setTestConfig(t *testing.T, peppersRaw, activePepperID string) {
 		JWTPrivateKey:      priv,
 		JWTPublicKey:       pub,
 		JWTAlgorithm:       jwt.SigningMethodEdDSA,
+		MFAEncryptionKey:   mfaKey,
+		MFAIssuer:          "auth-api-test",
 	}
 	activePepperManagerOnce = sync.Once{}
 	activePepperManagerVal = nil

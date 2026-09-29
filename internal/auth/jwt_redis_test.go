@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"auth-api/internal/entities"
 )
 
 // These tests cover the jwt.go functions that touch Redis (session
@@ -115,12 +117,12 @@ func TestGenerateTemporaryJWT(t *testing.T) {
 	ctx := context.Background()
 	rdb := newTestRedis(t)
 
-	token, err := GenerateTemporaryJWT(ctx, rdb, "someone@example.com", 10*time.Minute)
+	token, err := GenerateTemporaryJWT(ctx, rdb, "someone@example.com", entities.RoleJoiner, 10*time.Minute)
 	if err != nil {
 		t.Fatalf("GenerateTemporaryJWT: %v", err)
 	}
 
-	email, id, err := VerifyAndParseTemporaryJWT(ctx, rdb, "Bearer "+token)
+	email, id, err := VerifyAndParseTemporaryJWT(ctx, rdb, "Bearer "+token, entities.RoleJoiner)
 	if err != nil {
 		t.Fatalf("VerifyAndParseTemporaryJWT: %v", err)
 	}
@@ -169,7 +171,7 @@ func TestVerifyAndParseJWT(t *testing.T) {
 
 	t.Run("temporary token is rejected on the normal path", func(t *testing.T) {
 		rdb := newTestRedis(t)
-		token, err := GenerateTemporaryJWT(ctx, rdb, "someone@example.com", time.Hour)
+		token, err := GenerateTemporaryJWT(ctx, rdb, "someone@example.com", entities.RoleJoiner, time.Hour)
 		if err != nil {
 			t.Fatalf("GenerateTemporaryJWT: %v", err)
 		}
@@ -195,7 +197,7 @@ func TestVerifyAndParseTemporaryJWT_RejectsNormalToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateUserTokens: %v", err)
 	}
-	if _, _, err := VerifyAndParseTemporaryJWT(ctx, rdb, "Bearer "+pair.AccessToken); err == nil {
+	if _, _, err := VerifyAndParseTemporaryJWT(ctx, rdb, "Bearer "+pair.AccessToken, entities.RoleJoiner); err == nil {
 		t.Error("expected a normal access token to be rejected by VerifyAndParseTemporaryJWT")
 	}
 }
@@ -205,18 +207,18 @@ func TestVerifyAndParseTemporaryJWT_RevokedSession(t *testing.T) {
 	ctx := context.Background()
 	rdb := newTestRedis(t)
 
-	token, err := GenerateTemporaryJWT(ctx, rdb, "someone@example.com", time.Hour)
+	token, err := GenerateTemporaryJWT(ctx, rdb, "someone@example.com", entities.RoleJoiner, time.Hour)
 	if err != nil {
 		t.Fatalf("GenerateTemporaryJWT: %v", err)
 	}
-	_, id, err := VerifyAndParseTemporaryJWT(ctx, rdb, "Bearer "+token)
+	_, id, err := VerifyAndParseTemporaryJWT(ctx, rdb, "Bearer "+token, entities.RoleJoiner)
 	if err != nil {
 		t.Fatalf("VerifyAndParseTemporaryJWT: %v", err)
 	}
 	if err := DeleteTemporarySession(ctx, id, rdb); err != nil {
 		t.Fatalf("DeleteTemporarySession: %v", err)
 	}
-	if _, _, err := VerifyAndParseTemporaryJWT(ctx, rdb, "Bearer "+token); err == nil {
+	if _, _, err := VerifyAndParseTemporaryJWT(ctx, rdb, "Bearer "+token, entities.RoleJoiner); err == nil {
 		t.Error("expected a revoked temporary session to be rejected")
 	}
 }

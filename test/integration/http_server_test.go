@@ -74,7 +74,7 @@ func newTestServer(t *testing.T, opts ...testServerOption) *httptest.Server {
 	}
 	limiterInstance := limiter.New(store, limiter.Rate{Period: time.Second, Limit: 1000})
 
-	svcs := server.NewServices(testDB, testRedis, fakeResend, limiterInstance, zap.NewNop())
+	svcs := server.NewServices(testDB, testRedis, fakeResend, limiterInstance, zap.NewNop(), nil, nil)
 	ts := httptest.NewServer(handlers.NewHandler(svcs))
 	t.Cleanup(ts.Close)
 	return ts
@@ -95,7 +95,7 @@ func newTestServerWithLimit(t *testing.T, limit int64) *httptest.Server {
 	}
 	limiterInstance := limiter.New(store, limiter.Rate{Period: time.Minute, Limit: limit})
 
-	svcs := server.NewServices(testDB, testRedis, fakeResend, limiterInstance, zap.NewNop())
+	svcs := server.NewServices(testDB, testRedis, fakeResend, limiterInstance, zap.NewNop(), nil, nil)
 	ts := httptest.NewServer(handlers.NewHandler(svcs))
 	t.Cleanup(ts.Close)
 	return ts
