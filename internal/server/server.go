@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/MicahParks/keyfunc/v3"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/resend/resend-go/v2"
@@ -32,6 +33,11 @@ type Services struct {
 	// over an optional, best-effort-configured feature.
 	GoogleJWKS keyfunc.Keyfunc
 	AppleJWKS  keyfunc.Keyfunc
+	// WebAuthn is nil when WEBAUTHN_RP_ID isn't configured — same
+	// graceful-degradation reasoning as GoogleJWKS/AppleJWKS above; the
+	// passkey handlers treat a nil *webauthn.WebAuthn as "this feature
+	// isn't available".
+	WebAuthn *webauthn.WebAuthn
 }
 
 // NewServices constructs a Services bundle from already-initialized clients.
@@ -43,10 +49,11 @@ func NewServices(
 	logger *zap.Logger,
 	googleJWKS keyfunc.Keyfunc,
 	appleJWKS keyfunc.Keyfunc,
+	webAuthn *webauthn.WebAuthn,
 ) *Services {
 	return &Services{
 		DB: db, RedisClient: redis, ResendClient: resend, Limiter: lim, Logger: logger,
-		GoogleJWKS: googleJWKS, AppleJWKS: appleJWKS,
+		GoogleJWKS: googleJWKS, AppleJWKS: appleJWKS, WebAuthn: webAuthn,
 	}
 }
 

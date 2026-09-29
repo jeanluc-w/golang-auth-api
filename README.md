@@ -59,6 +59,15 @@ using it for anything real.
   and a conservative, unconditional rule that no admin account can be
   targeted by any of it. See [Security notes](#security-notes) for the full
   authorization model.
+- **Passkeys (WebAuthn)** via
+  [`go-webauthn/webauthn`](https://github.com/go-webauthn/webauthn) rather
+  than hand-rolled CBOR/attestation parsing: usernameless (discoverable
+  credential) login, credential management (list/rename/remove), and a
+  successful passkey login bypasses the separate TOTP/email MFA gate
+  entirely, since a passkey is already phishing-resistant and typically
+  backed by a platform biometric/PIN prompt. See [Security
+  notes](#security-notes) for the storage-shape and test-coverage
+  reasoning.
 - **Scheduled maintenance jobs** (`cmd/cron`) that expire old password
   reset tokens/login logs/unverified MFA factors and revoke stale sessions
   — a one-shot binary meant for an external scheduler, not a background
@@ -146,8 +155,27 @@ understand any given flow — they're not thin passthroughs to the DB.
 | POST   | `/auth/v1/admin/users/:id/role`     | access JWT (admin-only) | Change a user's role between `user` and `moderator` |
 | DELETE | `/auth/v1/admin/users/:id`          | access JWT (admin-only) | Soft-delete an account and revoke all of its sessions |
 | GET    | `/auth/v1/admin/audit-logs`         | access JWT (moderator+) | List audit log entries, optionally filtered to one user |
+| POST   | `/auth/v1/passkey/register/begin`   | access JWT             | Start adding a passkey; returns WebAuthn creation options |
+| POST   | `/auth/v1/passkey/register/finish`  | access JWT             | Complete registration with the authenticator's response (raw WebAuthn body, not JSON — see below) |
+| POST   | `/auth/v1/passkey/login/begin`      | none                   | Start a usernameless passkey login; returns assertion options + a ceremony ID |
+| POST   | `/auth/v1/passkey/login/finish`     | ceremony ID in query string | Complete a passkey login with the authenticator's response; bypasses any separate MFA gate |
+| GET    | `/auth/v1/passkey/credentials`      | access JWT             | List your registered passkeys (labels/timestamps only) |
+| POST   | `/auth/v1/passkey/credentials/:id/rename` | access JWT       | Rename a passkey |
+| DELETE | `/auth/v1/passkey/credentials/:id`  | access JWT + current password | Remove a passkey |
 
 A `login` response for an MFA-enabled account is `{"mfa_required": true, "challenge_token": "...", "method": "totp"|"email"}` instead of tokens. For `"totp"`, submit a code from the authenticator app directly to `mfa/verify-login`. For `"email"`, call `mfa/send-login-code` first to actually deliver a code (nothing is sent automatically just because a login attempt happened — see [Security notes](#security-notes)), then submit it the same way. A recovery code works at `mfa/verify-login` regardless of which method is active.
+
+The four `passkey/register/*` and `passkey/login/*` endpoints are the
+exception to every other route's `{"error": ..., "message": ...}` JSON
+shape: `register/finish` and `login/finish` expect the *raw* body
+`navigator.credentials.create()`/`.get()` produces (go-webauthn parses it
+directly, byte-exact — see [Security notes](#security-notes)), and
+`register/begin`/`login/begin` return that library's own WebAuthn options
+structs verbatim rather than this API's usual response envelope, so they
+can be passed straight to the browser's WebAuthn API. `login/finish`'s
+ceremony ID and `register/finish`'s optional passkey label both travel as
+query parameters rather than in the body, since the body isn't available
+for anything else.
 
 All error responses are `{"error": "<code>", "message": "<human text>"}`
 with an appropriate HTTP status; see `internal/utils/error_codes.go` for the
@@ -240,6 +268,9 @@ authoritative list; `.copy.env` has a template with comments).
 | `MFA_ISSUER` | no | `auth-api` | name shown in authenticator apps next to the account |
 | `GOOGLE_CLIENT_ID` | no | empty | enables `POST /auth/v1/sso/google` when set |
 | `APPLE_CLIENT_ID` | no | empty | enables `POST /auth/v1/sso/apple` when set |
+| `WEBAUTHN_RP_ID` | no | empty | effective domain (e.g. `example.com`); enables the passkey endpoints when set |
+| `WEBAUTHN_RP_ORIGINS` | no | empty | comma-separated fully-qualified origins allowed to complete a ceremony (e.g. `https://app.example.com`) |
+| `WEBAUTHN_RP_DISPLAY_NAME` | no | `auth-api` | shown to the user during passkey registration |
 | `SENTRY_SAMPLE_RATE` | no | `1.0` | |
 
 ### Password peppers
@@ -442,6 +473,42 @@ Written for someone reviewing this as a reference, not just using it — the
   intentional: an admin account is meant to be provisioned out-of-band
   (direct DB access), not minted by another admin through the same surface
   a compromised admin session could reach.
+- **Passkey credentials are stored as opaque JSON, not decomposed into
+  columns** (`webauthn_credentials.credential`, `db/migrations/006_webauthn_credentials.up.sql`)
+  — the go-webauthn library's own documentation presents this as one of two
+  legitimate storage shapes and recommends it specifically when the
+  explicit-column approach "genuinely does not fit," which is the case
+  here: `Credential`'s flag/attestation substructures carry unexported
+  fields the library only reconstructs correctly via its own JSON
+  marshaling, so decomposing them into columns means round-tripping
+  through that marshaling anyway before splitting the result up. Only
+  `credential_id` gets its own indexed column, since it's the actual
+  login-time lookup key.
+- **No separate randomly-generated WebAuthn user handle** — this schema
+  reuses each account's existing `users.id` UUID as the handle
+  (`auth.WebAuthnUser.WebAuthnID`), instead of the fully independent random
+  value the library's docs otherwise recommend storing in its own table. A
+  deliberate simplification: `gen_random_uuid()` output is already
+  non-sequential and isn't exposed anywhere as a guessable, low-entropy
+  value, so reusing it avoids a second table and a bootstrap step for a
+  marginal privacy gain over a fully independent handle.
+- **A successful passkey login skips the separate TOTP/email MFA
+  challenge** (`services.FinishPasskeyLogin` calls `issueLoginSession`
+  directly, not `Login`) — a passkey is already phishing-resistant and
+  device-bound, and typically gated by a platform biometric/PIN prompt, so
+  it already provides what stacking a second factor on top exists to add.
+- **Passkey ceremony verification isn't re-tested at the unit level the way
+  TOTP/OIDC are** — `github.com/go-webauthn/webauthn` is what's being
+  trusted for cryptographic ceremony correctness here, the same way pgx or
+  go-redis are trusted rather than independently re-verified; simulating a
+  full signed authenticator response to test against would mean
+  reimplementing a meaningful slice of that library's own (much larger)
+  test suite. `test/integration/passkey_test.go` covers what's actually
+  this codebase's own code instead: Redis-backed ceremony session
+  round-tripping, Finish* rejecting a missing/expired session before ever
+  reaching the library, passkey management being correctly scoped to the
+  owning user, and every entry point degrading to a clean "not configured"
+  error when `WEBAUTHN_RP_ID` is unset.
 - **Dependencies are scanned with [`govulncheck`](https://go.dev/blog/vuln)**
   in CI (and via `make vulncheck` locally), which does call-graph analysis
   rather than flagging every CVE in every transitive dependency regardless
@@ -543,8 +610,11 @@ authorization/attribution model (ban/unban/disable/enable/force-logout all
 revoking sessions correctly, role changes capped below admin, the
 unconditional self-target and admin-target refusals, and that a ban's audit
 log entry is actually attributed to the banning admin — `admin_test.go`),
-and all six `RunMaintenance` cleanup jobs seeded with backdated rows so each
-cutoff is tested precisely (`maintenance_test.go`) — all against real
+passkey ceremony-session handling and credential-management authorization —
+not full signed-authenticator ceremonies; see [Security
+notes](#security-notes) for why — (`passkey_test.go`), and all six
+`RunMaintenance` cleanup jobs seeded with backdated rows so each cutoff is
+tested precisely (`maintenance_test.go`) — all against real
 Postgres and Redis via [testcontainers-go](https://golang.testcontainers.org/).
 Requires a working Docker (or Podman, via testcontainers' compatibility
 mode) daemon.

@@ -33,6 +33,10 @@ var Errors = struct {
 	MFAAlreadyEnabled         ErrorDetail
 	MFANotEnabled             ErrorDetail
 	NewPasswordMatchesCurrent ErrorDetail
+	PasskeyAlreadyRegistered  ErrorDetail
+	PasskeyChallengeFailed    ErrorDetail
+	PasskeyNotConfigured      ErrorDetail
+	PasskeyNotFound           ErrorDetail
 	RouteNotFound             ErrorDetail
 	SessionExpired            ErrorDetail
 	SSOAccountConflict        ErrorDetail
@@ -68,6 +72,10 @@ var Errors = struct {
 	MFAAlreadyEnabled:         ErrorDetail{"mfa_already_enabled", "MFA is already enabled for this account", http.StatusConflict},                                     // 409
 	MFANotEnabled:             ErrorDetail{"mfa_not_enabled", "MFA is not enabled for this account", http.StatusBadRequest},                                           // 400
 	NewPasswordMatchesCurrent: ErrorDetail{"new_password_matches_current", "New password must be different from your current password", http.StatusBadRequest},        // 400
+	PasskeyAlreadyRegistered:  ErrorDetail{"passkey_already_registered", "This passkey is already registered", http.StatusConflict},                                   // 409
+	PasskeyChallengeFailed:    ErrorDetail{"passkey_challenge_failed", "Could not verify the passkey response", http.StatusUnauthorized},                              // 401
+	PasskeyNotConfigured:      ErrorDetail{"passkey_not_configured", "Passkeys are not available", http.StatusServiceUnavailable},                                     // 503
+	PasskeyNotFound:           ErrorDetail{"passkey_not_found", "Passkey not found", http.StatusNotFound},                                                             // 404
 	RouteNotFound:             ErrorDetail{"route_not_found", "Requested route not found", http.StatusNotFound},                                                       // 404
 	SessionExpired:            ErrorDetail{"session_expired", "Refresh token is invalid or expired", http.StatusUnauthorized},                                         // 401
 	SSOAccountConflict:        ErrorDetail{"sso_account_conflict", "An account already exists with this email using a different sign-in method", http.StatusConflict}, // 409

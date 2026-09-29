@@ -48,6 +48,9 @@ type Config struct {
 	MFARecoveryCodeCount   int
 	GoogleClientID         string
 	AppleClientID          string
+	WebAuthnRPID           string
+	WebAuthnRPDisplayName  string
+	WebAuthnRPOrigins      []string
 	JWTPrivateKey          ed25519.PrivateKey
 	JWTPublicKey           ed25519.PublicKey
 	JWTAlgorithm           jwt.SigningMethod
@@ -109,9 +112,18 @@ func Load() {
 		// a reference implementation.
 		GoogleClientID: getStringConfig("GOOGLE_CLIENT_ID", ""),
 		AppleClientID:  getStringConfig("APPLE_CLIENT_ID", ""),
-		JWTPrivateKey:  loadPrivateKey(requireStringConfig("JWT_PRIVATE_KEY_FILE")),
-		JWTPublicKey:   loadPublicKey(requireStringConfig("JWT_PUBLIC_KEY_FILE")),
-		JWTAlgorithm:   jwt.SigningMethodEdDSA,
+		// Optional, same reasoning as Google/Apple above: unset means the
+		// passkey endpoints respond with a clear "not configured" error
+		// instead of the service failing to start. WEBAUTHN_RP_ID should be
+		// the effective domain (e.g. "example.com"), and
+		// WEBAUTHN_RP_ORIGINS the comma-separated fully-qualified origins
+		// permitted to complete a ceremony (e.g. "https://example.com").
+		WebAuthnRPID:          getStringConfig("WEBAUTHN_RP_ID", ""),
+		WebAuthnRPDisplayName: getStringConfig("WEBAUTHN_RP_DISPLAY_NAME", "auth-api"),
+		WebAuthnRPOrigins:     parseListConfig("WEBAUTHN_RP_ORIGINS", ""),
+		JWTPrivateKey:         loadPrivateKey(requireStringConfig("JWT_PRIVATE_KEY_FILE")),
+		JWTPublicKey:          loadPublicKey(requireStringConfig("JWT_PUBLIC_KEY_FILE")),
+		JWTAlgorithm:          jwt.SigningMethodEdDSA,
 	}
 }
 

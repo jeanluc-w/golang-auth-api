@@ -57,6 +57,14 @@ func NewHandler(svcs *server.Services) http.Handler {
 	router.GET(server.V1_AdminAuditLogs, requireRole(postgres.UserRoleModerator, h.AdminListAuditLogsHandler))
 	router.POST(server.V1_AdminUserRole, requireRole(postgres.UserRoleAdmin, h.AdminChangeUserRoleHandler)) // admin-only
 	router.DELETE(server.V1_AdminUserDetail, requireRole(postgres.UserRoleAdmin, h.AdminDeleteUserHandler)) // admin-only
+	// Passkey APIs
+	router.POST(server.V1_PasskeyRegisterBegin, h.PasskeyRegisterBeginHandler)
+	router.POST(server.V1_PasskeyRegisterFinish, h.PasskeyRegisterFinishHandler)
+	router.POST(server.V1_PasskeyLoginBegin, h.PasskeyLoginBeginHandler)
+	router.POST(server.V1_PasskeyLoginFinish, h.PasskeyLoginFinishHandler)
+	router.GET(server.V1_PasskeyList, h.PasskeyListHandler)
+	router.POST(server.V1_PasskeyRename, h.PasskeyRenameHandler)
+	router.DELETE(server.V1_PasskeyDetail, h.PasskeyDeleteHandler)
 
 	// Handle httprouter's default NotFound and MethodNotAllowed responses
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

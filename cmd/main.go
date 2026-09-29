@@ -8,6 +8,7 @@ import (
 
 	"github.com/MicahParks/keyfunc/v3"
 	"github.com/getsentry/sentry-go"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/resend/resend-go/v2"
@@ -72,8 +73,12 @@ func main() {
 	googleJWKS := newProviderKeyfuncOrNil(config.Loaded.GoogleClientID, auth.GoogleJWKSURL, logger)
 	appleJWKS := newProviderKeyfuncOrNil(config.Loaded.AppleClientID, auth.AppleJWKSURL, logger)
 
+	// Passkeys are optional the same way: a missing WEBAUTHN_RP_ID disables
+	// just that feature rather than failing the whole server.
+	webAuthn := newWebAuthnOrNil(logger)
+
 	// Establish 3rd Party services so handlers/services can use them
-	services := server.NewServices(pgPool, redisClient, resendClient, limiterInstance, logger, googleJWKS, appleJWKS)
+	services := server.NewServices(pgPool, redisClient, resendClient, limiterInstance, logger, googleJWKS, appleJWKS, webAuthn)
 
 	// Build the full application handler: routes + middleware stack
 	handler := handlers.NewHandler(services)
@@ -104,4 +109,23 @@ func newProviderKeyfuncOrNil(clientID, jwksURL string, logger *zap.Logger) keyfu
 		return nil
 	}
 	return kf
+}
+
+// newWebAuthnOrNil builds the Relying Party WebAuthn instance, or returns
+// nil if WEBAUTHN_RP_ID is unset (passkeys not configured) or the config
+// is otherwise invalid (logged, not fatal — see the call site's comment).
+func newWebAuthnOrNil(logger *zap.Logger) *webauthn.WebAuthn {
+	if config.Loaded.WebAuthnRPID == "" {
+		return nil
+	}
+	w, err := webauthn.New(&webauthn.Config{
+		RPID:          config.Loaded.WebAuthnRPID,
+		RPDisplayName: config.Loaded.WebAuthnRPDisplayName,
+		RPOrigins:     config.Loaded.WebAuthnRPOrigins,
+	})
+	if err != nil {
+		logger.Error("Failed to construct WebAuthn Relying Party; passkeys will be unavailable", zap.Error(err))
+		return nil
+	}
+	return w
 }

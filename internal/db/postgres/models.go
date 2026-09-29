@@ -469,3 +469,13 @@ type User struct {
 	LastSeen           pgtype.Timestamptz
 	DeletedAt          pgtype.Timestamptz
 }
+
+type WebauthnCredential struct {
+	ID           pgtype.UUID
+	UserID       pgtype.UUID
+	CredentialID []byte
+	Name         pgtype.Text
+	Credential   []byte
+	CreatedAt    pgtype.Timestamptz
+	LastUsedAt   pgtype.Timestamptz
+}

@@ -32,6 +32,22 @@ const (
 	V1_AdminUserResetPassword string = "/auth/v1/admin/users/:id/reset-password"
 	V1_AdminUserRole          string = "/auth/v1/admin/users/:id/role"
 	V1_AdminAuditLogs         string = "/auth/v1/admin/audit-logs"
+	// Passkey (WebAuthn) APIs. Management routes live under
+	// .../passkey/credentials/... rather than directly under .../passkey/:id
+	// — httprouter (github.com/julienschmidt/httprouter) builds one radix
+	// tree per HTTP method and panics at registration time if a literal
+	// segment (e.g. "register") and a wildcard (":id") would both appear as
+	// children of the same node for the same method, which is exactly what
+	// .../passkey/register/begin (POST) alongside .../passkey/:id/rename
+	// (POST) would do. Nesting the wildcard under its own literal prefix
+	// avoids that collision entirely.
+	V1_PasskeyRegisterBegin  string = "/auth/v1/passkey/register/begin"
+	V1_PasskeyRegisterFinish string = "/auth/v1/passkey/register/finish"
+	V1_PasskeyLoginBegin     string = "/auth/v1/passkey/login/begin"
+	V1_PasskeyLoginFinish    string = "/auth/v1/passkey/login/finish"
+	V1_PasskeyList           string = "/auth/v1/passkey/credentials"
+	V1_PasskeyRename         string = "/auth/v1/passkey/credentials/:id/rename"
+	V1_PasskeyDetail         string = "/auth/v1/passkey/credentials/:id"
 )
 
 // Routes where JWT validation isn't needed
@@ -53,6 +69,12 @@ var OpenRoutes = []string{
 	V1_MFASendLoginCode,
 	V1_SSOGoogle,
 	V1_SSOApple,
+	// Passkey login has no session yet either — same reasoning as
+	// V1_MFAVerifyLogin/V1_MFASendLoginCode. Registration, by contrast, is
+	// authenticated (it's adding a passkey to an existing session) and is
+	// NOT an open route.
+	V1_PasskeyLoginBegin,
+	V1_PasskeyLoginFinish,
 }
 
 // Routes where only Temporary JWTs are allowed (essentially sign-ups)
