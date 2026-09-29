@@ -13,8 +13,11 @@ type ErrorDetail struct {
 var Errors = struct {
 	AccountLocked             ErrorDetail
 	AccountNotUsable          ErrorDetail
+	AdminProtected            ErrorDetail
+	CannotTargetSelf          ErrorDetail
 	CodeExpired               ErrorDetail
 	EmailIsTaken              ErrorDetail
+	Forbidden                 ErrorDetail
 	IncorrectCode             ErrorDetail
 	InternalServerError       ErrorDetail
 	InvalidCredentials        ErrorDetail
@@ -25,6 +28,7 @@ var Errors = struct {
 	InvalidPayload            ErrorDetail
 	InvalidPayloadMedia       ErrorDetail
 	InvalidPayloadSize        ErrorDetail
+	InvalidRole               ErrorDetail
 	InvalidUsernameFormat     ErrorDetail
 	MFAAlreadyEnabled         ErrorDetail
 	MFANotEnabled             ErrorDetail
@@ -38,13 +42,17 @@ var Errors = struct {
 	TooManyAttempts           ErrorDetail
 	TooSoonToRequest          ErrorDetail
 	Unauthorized              ErrorDetail
+	UserNotFound              ErrorDetail
 	UsernameTaken             ErrorDetail
 	TokenGenerationFailed     ErrorDetail
 }{
 	AccountLocked:             ErrorDetail{"account_locked", "Account temporarily locked due to too many failed login attempts", http.StatusLocked},                   // 423
 	AccountNotUsable:          ErrorDetail{"account_not_usable", "This account cannot currently sign in", http.StatusForbidden},                                       // 403
+	AdminProtected:            ErrorDetail{"admin_protected", "This action cannot be performed on an admin account", http.StatusForbidden},                            // 403
+	CannotTargetSelf:          ErrorDetail{"cannot_target_self", "This action cannot be performed on your own account", http.StatusBadRequest},                        // 400
 	CodeExpired:               ErrorDetail{"code_expired", "Verification code has expired", http.StatusUnauthorized},                                                  // 401
 	EmailIsTaken:              ErrorDetail{"email_is_taken", "Email is already taken", http.StatusConflict},                                                           // 409
+	Forbidden:                 ErrorDetail{"forbidden", "You do not have permission to perform this action", http.StatusForbidden},                                    // 403
 	IncorrectCode:             ErrorDetail{"invalid_code", "Invalid verification code", http.StatusUnauthorized},                                                      // 401
 	InternalServerError:       ErrorDetail{"internal_server_error", "Something went wrong", http.StatusInternalServerError},                                           // 500
 	InvalidCredentials:        ErrorDetail{"invalid_credentials", "Invalid email or password", http.StatusUnauthorized},                                               // 401
@@ -55,6 +63,7 @@ var Errors = struct {
 	InvalidPayload:            ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusBadRequest},                                                       // 400
 	InvalidPayloadSize:        ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusRequestEntityTooLarge},                                            // 413
 	InvalidPayloadMedia:       ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusUnsupportedMediaType},                                             // 415
+	InvalidRole:               ErrorDetail{"invalid_role", "Invalid role submitted", http.StatusBadRequest},                                                           // 400
 	InvalidUsernameFormat:     ErrorDetail{"invalid_username_format", "Invalid username submitted", http.StatusBadRequest},                                            // 400
 	MFAAlreadyEnabled:         ErrorDetail{"mfa_already_enabled", "MFA is already enabled for this account", http.StatusConflict},                                     // 409
 	MFANotEnabled:             ErrorDetail{"mfa_not_enabled", "MFA is not enabled for this account", http.StatusBadRequest},                                           // 400
@@ -68,6 +77,7 @@ var Errors = struct {
 	TooManyAttempts:           ErrorDetail{"too_many_attempts", "Too many failed attempts", http.StatusTooManyRequests},                                               // 429
 	TooSoonToRequest:          ErrorDetail{"too_soon_to_request", "Please wait before requesting another code", http.StatusTooManyRequests},                           // 429
 	Unauthorized:              ErrorDetail{"unauthorized", "Unauthorized access", http.StatusUnauthorized},                                                            // 401
+	UserNotFound:              ErrorDetail{"user_not_found", "User not found", http.StatusNotFound},                                                                   // 404
 	UsernameTaken:             ErrorDetail{"username_taken", "Username already in use", http.StatusConflict},                                                          // 409
 	TokenGenerationFailed:     ErrorDetail{"session_generation_failed", "Failed to generate session, please log-in", http.StatusInternalServerError},                  // 500
 }

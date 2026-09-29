@@ -17,6 +17,17 @@ const (
 	V1_MFAVerifyLogin         string = "/auth/v1/mfa/verify-login"
 	V1_SSOGoogle              string = "/auth/v1/sso/google"
 	V1_SSOApple               string = "/auth/v1/sso/apple"
+	// Admin APIs (moderator+/admin-only — see handlers.requireRole)
+	V1_AdminUsers             string = "/auth/v1/admin/users"
+	V1_AdminUserDetail        string = "/auth/v1/admin/users/:id"
+	V1_AdminUserBan           string = "/auth/v1/admin/users/:id/ban"
+	V1_AdminUserUnban         string = "/auth/v1/admin/users/:id/unban"
+	V1_AdminUserDisable       string = "/auth/v1/admin/users/:id/disable"
+	V1_AdminUserEnable        string = "/auth/v1/admin/users/:id/enable"
+	V1_AdminUserForceLogout   string = "/auth/v1/admin/users/:id/force-logout"
+	V1_AdminUserResetPassword string = "/auth/v1/admin/users/:id/reset-password"
+	V1_AdminUserRole          string = "/auth/v1/admin/users/:id/role"
+	V1_AdminAuditLogs         string = "/auth/v1/admin/audit-logs"
 )
 
 // Routes where JWT validation isn't needed

@@ -45,6 +45,13 @@ using it for anything real.
   that already has an account under a different identity is rejected as a
   conflict rather than silently auto-linked. See
   [Security notes](#security-notes) for the full rationale.
+- **Admin API** (`moderator`/`admin` roles) — list/search/inspect accounts,
+  ban/unban, disable/enable, force-logout, admin-initiated password reset,
+  and (admin-only) role changes and soft-delete, all with automatic,
+  actor-attributed audit logging (`audit_logs`, via `postgres.WithActor`)
+  and a conservative, unconditional rule that no admin account can be
+  targeted by any of it. See [Security notes](#security-notes) for the full
+  authorization model.
 - **Scheduled maintenance jobs** (`cmd/cron`) that expire old password
   reset tokens/login logs/unverified MFA factors and revoke stale sessions
   — a one-shot binary meant for an external scheduler, not a background
@@ -117,6 +124,17 @@ understand any given flow — they're not thin passthroughs to the DB.
 | POST   | `/auth/v1/mfa/verify-login`         | MFA challenge token in body | Complete an MFA-gated login with a TOTP or recovery code |
 | POST   | `/auth/v1/sso/google`               | none                   | Log in or sign up with a Google ID token |
 | POST   | `/auth/v1/sso/apple`                | none                   | Log in or sign up with an Apple identity token |
+| GET    | `/auth/v1/admin/users`              | access JWT (moderator+) | List/search user accounts |
+| GET    | `/auth/v1/admin/users/:id`          | access JWT (moderator+) | Get a single account's admin-facing detail view |
+| POST   | `/auth/v1/admin/users/:id/ban`      | access JWT (moderator+) | Ban an account and revoke all of its sessions |
+| POST   | `/auth/v1/admin/users/:id/unban`    | access JWT (moderator+) | Restore a banned account to active |
+| POST   | `/auth/v1/admin/users/:id/disable`  | access JWT (moderator+) | Disable an account and revoke all of its sessions |
+| POST   | `/auth/v1/admin/users/:id/enable`   | access JWT (moderator+) | Restore a disabled account to active |
+| POST   | `/auth/v1/admin/users/:id/force-logout` | access JWT (moderator+) | Revoke every session on an account without changing its status |
+| POST   | `/auth/v1/admin/users/:id/reset-password` | access JWT (moderator+) | Send a password-reset email on a user's behalf |
+| POST   | `/auth/v1/admin/users/:id/role`     | access JWT (admin-only) | Change a user's role between `user` and `moderator` |
+| DELETE | `/auth/v1/admin/users/:id`          | access JWT (admin-only) | Soft-delete an account and revoke all of its sessions |
+| GET    | `/auth/v1/admin/audit-logs`         | access JWT (moderator+) | List audit log entries, optionally filtered to one user |
 
 A `login` response for an MFA-enabled account is `{"mfa_required": true, "challenge_token": "..."}` instead of tokens — submit that token plus a code to `mfa/verify-login` to actually complete the login.
 
@@ -354,6 +372,44 @@ Written for someone reviewing this as a reference, not just using it — the
   `email_verified` as the JSON *string* `"true"`/`"false"` rather than a
   JSON boolean (a real, documented quirk); `auth.VerifyOIDCToken` handles
   both encodings rather than only the spec-correct one.
+- **The admin API's authorization boundary is a single chokepoint**
+  (`handlers.requireRole`, applied when each admin route is registered in
+  `router.go`) rather than a check repeated in every handler or service
+  function — `internal/services/admin_service.go` deliberately does not
+  re-check the caller's role itself, the same way the rest of this codebase
+  decides open-route-vs-protected-route auth entirely at the router layer
+  (`JWTMiddleware`/`server.OpenRoutes`) instead of in each handler.
+- **Every admin write is attributed in the audit log to the actual admin who
+  made it**, not left null — `postgres.WithActor` sets a transaction-local
+  `app.actor_id` Postgres session variable that the audit-log triggers in
+  `002_log_triggers.up.sql` read via `current_setting`, so the same triggers
+  that log a user's own self-service changes (with no actor, since the
+  target *is* the actor) correctly attribute admin-initiated ones instead.
+  It has to be a real transaction, not two separate statements: `SET LOCAL`
+  (what `set_config`'s `is_local=true` does) resets at the end of the
+  current transaction, and this API's connections come from a pool shared
+  across unrelated requests, so a session-scoped setting would leak into
+  the next request on that connection.
+- **The admin API refuses to touch any account that already has the
+  `admin` role, unconditionally, regardless of the acting admin's own
+  role** (`AdminProtected`) — this mirrors `trg_prevent_admin_demotion` and
+  `trg_prevent_admin_deletion` (`003_prevent_triggers.up.sql`), which block
+  demoting or deleting an admin at the database level with no exception for
+  who's asking. The API keeps that same unconditional stance for every
+  admin-affecting action (ban/disable/force-logout too, not just role
+  changes and deletion), so changing or removing an admin account is
+  deliberately left to direct database access rather than any API path.
+  Separately, no action can ever target the caller's own account
+  (`CannotTargetSelf`) — self-ban/self-demote/self-delete is exactly the
+  kind of mistake, or the exact move a compromised admin session would
+  make, this rules out entirely.
+- **Role changes are capped at `moderator`** — `POST
+  .../users/:id/role` (admin-only) refuses to promote anyone straight to
+  `admin` (`AdminProtected`); combined with the point above, there is no
+  API path — at any role — that can ever create or remove an admin. That's
+  intentional: an admin account is meant to be provisioned out-of-band
+  (direct DB access), not minted by another admin through the same surface
+  a compromised admin session could reach.
 - **Dependencies are scanned with [`govulncheck`](https://go.dev/blog/vuln)**
   in CI (and via `make vulncheck` locally), which does call-graph analysis
   rather than flagging every CVE in every transitive dependency regardless
@@ -371,14 +427,10 @@ retrofitted:
 
 - **MFA via SMS or email** (`mfa_factors.type` supports them, and the
   `UNIQUE(user_id, type)` constraint means a user could have one of each
-  alongside TOTP) — TOTP is the only type with a working code path. SMS
-  needs a paid provider integration (Twilio et al.) this repo deliberately
-  doesn't take a dependency on; email MFA would reuse the existing
-  Resend/template plumbing but is a meaningfully weaker factor (same inbox
-  as password reset) and wasn't worth adding just to say two exist.
-- **Admin actions** (`audit_logs` table, `moderator`/`admin` roles, and
-  triggers preventing admin deletion/demotion are all in place; there's no
-  admin API surface yet)
+  alongside TOTP) — TOTP is the only type with a working code path so far.
+  See [Security notes](#security-notes) once SMS/email MFA land for the
+  provider choice and why email MFA is a meaningfully weaker factor than
+  TOTP (same inbox as password reset).
 - **Linking an additional SSO provider (or email/password) to an
   already-authenticated account** — `services.SSOLogin` currently rejects
   an SSO login whose email already has an account under a different
@@ -447,12 +499,16 @@ change (`change_password_test.go`), the full MFA lifecycle (enroll → verify
 → MFA-gated login via TOTP or a recovery code → disable, plus wrong-code and
 wrong-password rejection — `mfa_test.go`), SSO's account-linking policy
 (new account, existing login, email-not-verified, email-conflict across
-providers, username-collision suffixing — `sso_test.go`), and all six
-`RunMaintenance` cleanup jobs seeded with backdated rows so each cutoff is
-tested precisely (`maintenance_test.go`) — all against real Postgres and
-Redis via [testcontainers-go](https://golang.testcontainers.org/). Requires
-a working Docker (or Podman, via testcontainers' compatibility mode)
-daemon.
+providers, username-collision suffixing — `sso_test.go`), the admin API's
+authorization/attribution model (ban/unban/disable/enable/force-logout all
+revoking sessions correctly, role changes capped below admin, the
+unconditional self-target and admin-target refusals, and that a ban's audit
+log entry is actually attributed to the banning admin — `admin_test.go`),
+and all six `RunMaintenance` cleanup jobs seeded with backdated rows so each
+cutoff is tested precisely (`maintenance_test.go`) — all against real
+Postgres and Redis via [testcontainers-go](https://golang.testcontainers.org/).
+Requires a working Docker (or Podman, via testcontainers' compatibility
+mode) daemon.
 
 SSO's integration tests call `services.SSOLogin` with already-verified
 `auth.OIDCClaims` directly rather than real ID tokens — token

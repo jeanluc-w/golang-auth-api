@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"auth-api/internal/db/postgres"
 	"auth-api/internal/server"
 	"auth-api/internal/utils"
 
@@ -40,6 +41,18 @@ func NewHandler(svcs *server.Services) http.Handler {
 	// SSO APIs
 	router.POST(server.V1_SSOGoogle, h.SSOGoogleHandler)
 	router.POST(server.V1_SSOApple, h.SSOAppleHandler)
+	// Admin APIs — moderator+ unless noted otherwise
+	router.GET(server.V1_AdminUsers, requireRole(postgres.UserRoleModerator, h.AdminListUsersHandler))
+	router.GET(server.V1_AdminUserDetail, requireRole(postgres.UserRoleModerator, h.AdminGetUserHandler))
+	router.POST(server.V1_AdminUserBan, requireRole(postgres.UserRoleModerator, h.AdminBanUserHandler))
+	router.POST(server.V1_AdminUserUnban, requireRole(postgres.UserRoleModerator, h.AdminUnbanUserHandler))
+	router.POST(server.V1_AdminUserDisable, requireRole(postgres.UserRoleModerator, h.AdminDisableUserHandler))
+	router.POST(server.V1_AdminUserEnable, requireRole(postgres.UserRoleModerator, h.AdminEnableUserHandler))
+	router.POST(server.V1_AdminUserForceLogout, requireRole(postgres.UserRoleModerator, h.AdminForceLogoutUserHandler))
+	router.POST(server.V1_AdminUserResetPassword, requireRole(postgres.UserRoleModerator, h.AdminResetUserPasswordHandler))
+	router.GET(server.V1_AdminAuditLogs, requireRole(postgres.UserRoleModerator, h.AdminListAuditLogsHandler))
+	router.POST(server.V1_AdminUserRole, requireRole(postgres.UserRoleAdmin, h.AdminChangeUserRoleHandler)) // admin-only
+	router.DELETE(server.V1_AdminUserDetail, requireRole(postgres.UserRoleAdmin, h.AdminDeleteUserHandler)) // admin-only
 
 	// Handle httprouter's default NotFound and MethodNotAllowed responses
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
