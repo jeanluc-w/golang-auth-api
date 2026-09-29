@@ -11,7 +11,14 @@ import (
 	"auth-api/config"
 )
 
-func HashRefreshToken(tok string) string {
+// HashOpaqueToken deterministically hashes a random opaque secret token
+// (a refresh token, a password reset token, etc.) so only the hash — never
+// the raw value — needs to be persisted. Looking one up is then a plain
+// equality/lookup query rather than an argon2 verification, which is
+// correct here: unlike a password, these tokens are already
+// high-entropy random values, not something meant to be brute-forceable
+// offline in the first place.
+func HashOpaqueToken(tok string) string {
 	sum := sha256.Sum256([]byte(tok))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

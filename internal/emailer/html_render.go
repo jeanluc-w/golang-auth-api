@@ -14,6 +14,12 @@ type VerificationTemplateData struct {
 	Year int
 }
 
+type PasswordResetTemplateData struct {
+	Token            string
+	ResetLink        string // empty when config.Loaded.PasswordResetURL isn't set
+	ExpiresInMinutes int
+}
+
 func RenderHTMLFromFS(name string, data any) (string, error) {
 	tmpl, err := template.ParseFS(templateFS, "templates/"+name)
 	if err != nil {
@@ -28,4 +34,8 @@ func RenderVerificationHTML(code string) (string, error) {
 	return RenderHTMLFromFS("verification_email.html.tmpl", VerificationTemplateData{
 		Code: code,
 	})
+}
+
+func RenderPasswordResetHTML(data PasswordResetTemplateData) (string, error) {
+	return RenderHTMLFromFS("password_reset_email.html.tmpl", data)
 }

@@ -8,10 +8,11 @@ const (
 	V1_VerifyEmail            string = "/auth/v1/verify-email"
 	V1_CompleteEmailJoin      string = "/auth/v1/complete-email-join"
 	V1_RefreshToken           string = "/auth/v1/refresh-token"
-	// Not yet implemented — the DB schema (password_resets, mfa_factors
-	// tables) already supports them; see the README's "Not implemented" section.
-	// Forgot password
-	// Change Password
+	V1_RequestPasswordReset   string = "/auth/v1/request-password-reset"
+	V1_ResetPassword          string = "/auth/v1/reset-password"
+	// Not yet implemented — the DB schema (mfa_factors table) already
+	// supports it; see the README's "Not implemented" section.
+	// Change Password (while authenticated, as opposed to a forgotten-password reset)
 	// SSO
 )
 
@@ -21,6 +22,8 @@ var OpenRoutes = []string{
 	V1_StartEmailVerification,
 	V1_VerifyEmail,
 	V1_Login,
+	V1_RequestPasswordReset,
+	V1_ResetPassword,
 }
 
 // Routes where only Temporary JWTs are allowed (essentially sign-ups)

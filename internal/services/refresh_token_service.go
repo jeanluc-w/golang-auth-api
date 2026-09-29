@@ -59,7 +59,7 @@ func RefreshToken(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Clie
 		return nil, &utils.Errors.SessionExpired
 	}
 
-	suppliedHash := auth.HashRefreshToken(rawRefreshToken)
+	suppliedHash := auth.HashOpaqueToken(rawRefreshToken)
 	if subtle.ConstantTimeCompare([]byte(storedHash), []byte(suppliedHash)) != 1 {
 		revokeCompromisedSession(ctx, db, redisClient, sessionID, sessionPG)
 		utils.LogWarn(ctx, "Refresh token mismatch; session revoked", zap.String("session_id", sessionID))
@@ -112,7 +112,7 @@ func RefreshToken(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Clie
 		return nil, &utils.Errors.TokenGenerationFailed
 	}
 
-	newHash := auth.HashRefreshToken(tokens.RefreshToken)
+	newHash := auth.HashOpaqueToken(tokens.RefreshToken)
 	if _, err := q.RotateRefreshSession(ctx, postgres.RotateRefreshSessionParams{
 		RefreshTokenHash: pgtype.Text{String: newHash, Valid: true},
 		ExpiresAt:        pgtype.Timestamptz{Time: tokens.RefreshExp, Valid: true},

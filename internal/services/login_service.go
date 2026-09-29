@@ -141,7 +141,7 @@ func Login(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, ema
 		return nil, &utils.Errors.TokenGenerationFailed
 	}
 
-	refreshHash := auth.HashRefreshToken(tokens.RefreshToken)
+	refreshHash := auth.HashOpaqueToken(tokens.RefreshToken)
 	_, err = postgres.CreateRefreshSession(ctx, q, postgres.RefreshSessionInput{
 		SessionID:        tokens.SessionID,
 		UserID:           identity.UserID,

@@ -85,6 +85,51 @@ func (q *Queries) GetRefreshSession(ctx context.Context, id pgtype.UUID) (GetRef
 	return i, err
 }
 
+const listActiveSessionIDs = `-- name: ListActiveSessionIDs :many
+SELECT id
+FROM sessions
+WHERE user_id = $1 AND revoked = FALSE
+`
+
+// Used before a bulk revoke (e.g. after a password reset) to also clear
+// each session's Redis entry — revoking here only updates Postgres, which
+// the refresh-token flow checks, but an already-issued access JWT stays
+// valid until Redis's own session:<id> key is removed too.
+func (q *Queries) ListActiveSessionIDs(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listActiveSessionIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeAllUserSessions = `-- name: RevokeAllUserSessions :exec
+UPDATE sessions
+SET revoked = TRUE, revoked_at = now()
+WHERE user_id = $1 AND revoked = FALSE
+`
+
+// Kills every active session for a user in one statement — used after a
+// password reset, since that's a security-sensitive event where staying
+// logged in everywhere is the wrong default. Pair with ListActiveSessionIDs
+// + auth.DeleteSession per ID to also clear the Redis side.
+func (q *Queries) RevokeAllUserSessions(ctx context.Context, userID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, revokeAllUserSessions, userID)
+	return err
+}
+
 const revokeSession = `-- name: RevokeSession :exec
 UPDATE sessions
 SET revoked = TRUE, revoked_at = now()

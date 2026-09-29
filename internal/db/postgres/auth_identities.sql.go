@@ -84,6 +84,57 @@ func (q *Queries) GetEmailAuthByEmail(ctx context.Context, email string) (GetEma
 	return i, err
 }
 
+const getEmailAuthByUserID = `-- name: GetEmailAuthByUserID :one
+SELECT
+  u.id AS user_id,
+  u.username,
+  u.username_display,
+  u.role,
+  u.status,
+  u.deleted_at,
+  ai.id AS identity_id,
+  ai.password_hash,
+  ai.failed_attempts,
+  ai.locked_at
+FROM auth_identities ai
+JOIN users u ON u.id = ai.user_id
+WHERE ai.provider = 'email' AND u.id = $1
+`
+
+type GetEmailAuthByUserIDRow struct {
+	UserID          pgtype.UUID
+	Username        string
+	UsernameDisplay string
+	Role            UserRole
+	Status          NullUserStatus
+	DeletedAt       pgtype.Timestamptz
+	IdentityID      pgtype.UUID
+	PasswordHash    pgtype.Text
+	FailedAttempts  pgtype.Int4
+	LockedAt        pgtype.Timestamptz
+}
+
+// Same shape as GetEmailAuthByEmail, keyed by user_id instead — used by the
+// password-reset flow, which already has an authenticated-by-token user_id
+// (from the reset record itself) rather than a caller-supplied email.
+func (q *Queries) GetEmailAuthByUserID(ctx context.Context, userID pgtype.UUID) (GetEmailAuthByUserIDRow, error) {
+	row := q.db.QueryRow(ctx, getEmailAuthByUserID, userID)
+	var i GetEmailAuthByUserIDRow
+	err := row.Scan(
+		&i.UserID,
+		&i.Username,
+		&i.UsernameDisplay,
+		&i.Role,
+		&i.Status,
+		&i.DeletedAt,
+		&i.IdentityID,
+		&i.PasswordHash,
+		&i.FailedAttempts,
+		&i.LockedAt,
+	)
+	return i, err
+}
+
 const incrementFailedLoginAttempts = `-- name: IncrementFailedLoginAttempts :one
 UPDATE auth_identities
 SET failed_attempts = failed_attempts + 1,

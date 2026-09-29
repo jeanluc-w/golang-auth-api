@@ -5,26 +5,26 @@ import (
 	"testing"
 )
 
-func TestHashRefreshToken_Deterministic(t *testing.T) {
-	a := HashRefreshToken("some-token-value")
-	b := HashRefreshToken("some-token-value")
+func TestHashOpaqueToken_Deterministic(t *testing.T) {
+	a := HashOpaqueToken("some-token-value")
+	b := HashOpaqueToken("some-token-value")
 	if a != b {
 		t.Errorf("expected deterministic hash, got %q and %q", a, b)
 	}
 }
 
-func TestHashRefreshToken_DifferentInputsDifferentHashes(t *testing.T) {
-	a := HashRefreshToken("token-one")
-	b := HashRefreshToken("token-two")
+func TestHashOpaqueToken_DifferentInputsDifferentHashes(t *testing.T) {
+	a := HashOpaqueToken("token-one")
+	b := HashOpaqueToken("token-two")
 	if a == b {
 		t.Error("expected different inputs to produce different hashes")
 	}
 }
 
-func TestHashRefreshToken_IsBase64URLNoPadding(t *testing.T) {
-	got := HashRefreshToken("anything")
+func TestHashOpaqueToken_IsBase64URLNoPadding(t *testing.T) {
+	got := HashOpaqueToken("anything")
 	if _, err := base64.RawURLEncoding.DecodeString(got); err != nil {
-		t.Errorf("HashRefreshToken output isn't raw base64url: %v", err)
+		t.Errorf("HashOpaqueToken output isn't raw base64url: %v", err)
 	}
 }
 

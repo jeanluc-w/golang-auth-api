@@ -56,8 +56,8 @@ func TestGenerateUserTokens(t *testing.T) {
 	if stored == pair.RefreshToken {
 		t.Error("expected only the refresh token's hash to be stored, not the raw token")
 	}
-	if stored != HashRefreshToken(pair.RefreshToken) {
-		t.Error("stored refresh value does not match HashRefreshToken(raw)")
+	if stored != HashOpaqueToken(pair.RefreshToken) {
+		t.Error("stored refresh value does not match HashOpaqueToken(raw)")
 	}
 }
 
@@ -102,10 +102,10 @@ func TestRotateSessionTokens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get(refresh): %v", err)
 	}
-	if stored == HashRefreshToken(original.RefreshToken) {
+	if stored == HashOpaqueToken(original.RefreshToken) {
 		t.Error("expected rotation to overwrite the stored refresh hash")
 	}
-	if stored != HashRefreshToken(rotated.RefreshToken) {
+	if stored != HashOpaqueToken(rotated.RefreshToken) {
 		t.Error("stored refresh hash does not match the newly rotated token")
 	}
 }
@@ -222,13 +222,13 @@ func TestVerifyAndParseTemporaryJWT_RevokedSession(t *testing.T) {
 }
 
 func TestRandomToken(t *testing.T) {
-	a, err := randomToken(32)
+	a, err := RandomToken(32)
 	if err != nil {
-		t.Fatalf("randomToken: %v", err)
+		t.Fatalf("RandomToken: %v", err)
 	}
-	b, err := randomToken(32)
+	b, err := RandomToken(32)
 	if err != nil {
-		t.Fatalf("randomToken: %v", err)
+		t.Fatalf("RandomToken: %v", err)
 	}
 	if a == b {
 		t.Error("expected two random tokens not to collide")

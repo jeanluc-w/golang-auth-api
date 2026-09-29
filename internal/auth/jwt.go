@@ -146,11 +146,11 @@ func generateAndStoreRefresh(
 	if redisClient == nil {
 		return "", time.Time{}, errors.New("redis client is nil")
 	}
-	raw, err := randomToken(32) // 256-bit random, base64url-encoded
+	raw, err := RandomToken(32) // 256-bit random, base64url-encoded
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	hash := HashRefreshToken(raw)
+	hash := HashOpaqueToken(raw)
 	exp := time.Now().Add(ttl)
 
 	key := "refresh:" + sessionID
@@ -161,8 +161,10 @@ func generateAndStoreRefresh(
 	return raw, exp, nil
 }
 
-// randomToken returns base64url-encoded random bytes of length n.
-func randomToken(n int) (string, error) {
+// RandomToken returns base64url-encoded random bytes of length n. Used for
+// every opaque bearer secret this service issues (refresh tokens, password
+// reset tokens) — n=32 gives 256 bits of entropy either way.
+func RandomToken(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
 		return "", err

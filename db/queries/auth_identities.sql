@@ -35,6 +35,25 @@ FROM auth_identities ai
 JOIN users u ON u.id = ai.user_id
 WHERE ai.provider = 'email' AND ai.provider_user_id = lower(sqlc.arg(email));
 
+-- name: GetEmailAuthByUserID :one
+-- Same shape as GetEmailAuthByEmail, keyed by user_id instead — used by the
+-- password-reset flow, which already has an authenticated-by-token user_id
+-- (from the reset record itself) rather than a caller-supplied email.
+SELECT
+  u.id AS user_id,
+  u.username,
+  u.username_display,
+  u.role,
+  u.status,
+  u.deleted_at,
+  ai.id AS identity_id,
+  ai.password_hash,
+  ai.failed_attempts,
+  ai.locked_at
+FROM auth_identities ai
+JOIN users u ON u.id = ai.user_id
+WHERE ai.provider = 'email' AND u.id = sqlc.arg(user_id);
+
 -- name: IncrementFailedLoginAttempts :one
 UPDATE auth_identities
 SET failed_attempts = failed_attempts + 1,

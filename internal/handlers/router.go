@@ -28,6 +28,9 @@ func NewHandler(svcs *server.Services) http.Handler {
 	router.POST(server.V1_Login, h.LoginHandler)
 	router.POST(server.V1_Logout, h.LogoutHandler)
 	router.POST(server.V1_RefreshToken, h.RefreshTokenHandler)
+	// Password reset APIs
+	router.POST(server.V1_RequestPasswordReset, h.RequestPasswordResetHandler)
+	router.POST(server.V1_ResetPassword, h.ResetPasswordHandler)
 
 	// Handle httprouter's default NotFound and MethodNotAllowed responses
 	router.NotFound = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

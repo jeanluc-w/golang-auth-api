@@ -1,4 +1,4 @@
-.PHONY: hooks tidy fmt vet vulncheck test test-integration docker-build ci
+.PHONY: hooks tidy fmt vet vulncheck test test-integration docker-build cron ci
 
 # Install the repo's git hooks (pre-commit: gofmt + vet + tidy + test) for
 # this clone. Client-side hooks are per-clone, not per-repo, so this must be
@@ -38,6 +38,13 @@ test-integration:
 # Builds the production image (see Dockerfile). Requires Docker.
 docker-build:
 	docker build -t auth-api:local .
+
+# Runs the maintenance jobs once, against whatever DATABASE_URL (and the
+# rest of the usual env) points at. This is what an external cron/CronJob
+# should invoke on a schedule — see the README's "Maintenance / cron jobs"
+# section. Not run automatically by anything in this repo.
+cron:
+	go run ./cmd/cron
 
 # Everything CI runs, in one shot. Unlike `fmt`, this only checks formatting
 # (fails on drift) rather than rewriting files.

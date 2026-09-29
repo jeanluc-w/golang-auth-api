@@ -39,6 +39,8 @@ type Config struct {
 	TemporaryTokenTTL      time.Duration
 	LoginMaxFailedAttempts int
 	LoginLockDuration      time.Duration
+	PasswordResetTTL       time.Duration
+	PasswordResetURL       string
 	JWTPrivateKey          ed25519.PrivateKey
 	JWTPublicKey           ed25519.PublicKey
 	JWTAlgorithm           jwt.SigningMethod
@@ -78,9 +80,16 @@ func Load() {
 		TemporaryTokenTTL:      30 * time.Minute,
 		LoginMaxFailedAttempts: int(parseIntConfig("LOGIN_MAX_FAILED_ATTEMPTS", "5")),
 		LoginLockDuration:      time.Duration(parseIntConfig("LOGIN_LOCK_DURATION_MINUTES", "15")) * time.Minute,
-		JWTPrivateKey:          loadPrivateKey(requireStringConfig("JWT_PRIVATE_KEY_FILE")),
-		JWTPublicKey:           loadPublicKey(requireStringConfig("JWT_PUBLIC_KEY_FILE")),
-		JWTAlgorithm:           jwt.SigningMethodEdDSA,
+		PasswordResetTTL:       time.Duration(parseIntConfig("PASSWORD_RESET_TOKEN_TTL_MINUTES", "30")) * time.Minute,
+		// Optional: base URL of the frontend's reset-password page (e.g.
+		// https://app.example.com/reset-password). If set, the reset email
+		// links directly to it with ?token=<raw token> appended; if unset,
+		// the email just states the token itself for the client to use
+		// however it needs to (deep link, manual entry, etc).
+		PasswordResetURL: getStringConfig("PASSWORD_RESET_URL", ""),
+		JWTPrivateKey:    loadPrivateKey(requireStringConfig("JWT_PRIVATE_KEY_FILE")),
+		JWTPublicKey:     loadPublicKey(requireStringConfig("JWT_PUBLIC_KEY_FILE")),
+		JWTAlgorithm:     jwt.SigningMethodEdDSA,
 	}
 }
 

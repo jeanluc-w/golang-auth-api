@@ -24,6 +24,14 @@ using it for anything real.
   revokes the whole session, not just that request.
 - **Failed-login lockout** per account, backed by columns already in the
   `auth_identities` table (`failed_attempts`, `locked_at`).
+- **Password reset** via a single-use, hashed, time-limited emailed token;
+  enumeration-resistant (the response never varies based on whether the
+  email has an account), and completing a reset revokes every existing
+  session on the account, in both Postgres and Redis.
+- **Scheduled maintenance jobs** (`cmd/cron`) that expire old password
+  reset tokens/login logs/unverified MFA factors and revoke stale sessions
+  — a one-shot binary meant for an external scheduler, not a background
+  goroutine in the server itself. See [Maintenance / cron jobs](#maintenance--cron-jobs).
 - **Session tracking in Postgres** (`sessions` table) in addition to Redis,
   so revocation survives a Redis flush and sessions are independently
   auditable.
@@ -47,6 +55,7 @@ using it for anything real.
 
 ```
 cmd/main.go            wiring: config, DB/Redis/Sentry clients, routes, server start
+cmd/cron/main.go        one-shot maintenance job runner (see Maintenance / cron jobs)
 config/                env parsing, JWT key loading, logger/Sentry init
 internal/auth/          password hashing, JWT issuing/parsing, session helpers (pure-ish, few external deps)
 internal/services/      business logic: one file per use case, orchestrates auth+db+redis
@@ -82,6 +91,8 @@ understand any given flow — they're not thin passthroughs to the DB.
 | POST   | `/auth/v1/login`                    | none                   | Email/password login |
 | POST   | `/auth/v1/logout`                   | access JWT             | Revoke the current session |
 | POST   | `/auth/v1/refresh-token`            | expired-or-valid access JWT + refresh token in body | Rotate access+refresh tokens |
+| POST   | `/auth/v1/request-password-reset`   | none                   | Email a password reset token, if the account exists and is usable |
+| POST   | `/auth/v1/reset-password`           | reset token in body    | Set a new password and revoke every session on the account |
 
 All error responses are `{"error": "<code>", "message": "<human text>"}`
 with an appropriate HTTP status; see `internal/utils/error_codes.go` for the
@@ -168,6 +179,8 @@ authoritative list; `.copy.env` has a template with comments).
 | `REQUEST_RATE_LIMIT` | no | `10` | requests/second per user-or-IP |
 | `LOGIN_MAX_FAILED_ATTEMPTS` | no | `5` | failed logins before lockout |
 | `LOGIN_LOCK_DURATION_MINUTES` | no | `15` | how long a lockout lasts |
+| `PASSWORD_RESET_TOKEN_TTL_MINUTES` | no | `30` | how long a reset token/link stays valid |
+| `PASSWORD_RESET_URL` | no | empty | frontend reset-password page; if set, the reset email links to `<this>?token=<raw token>`; if empty, the email states the raw token instead |
 | `SENTRY_SAMPLE_RATE` | no | `1.0` | |
 
 ### Password peppers
@@ -243,6 +256,25 @@ Written for someone reviewing this as a reference, not just using it — the
   quietly exempt every auth-failure request from rate limiting — that
   tradeoff is documented in the code because it's easy to "fix" the wrong
   way.
+- **Password reset is enumeration-resistant by design**: unlike signup's
+  `StartEmailVerification` (which reveals `email_is_taken` — an accepted
+  tradeoff there), `RequestPasswordReset` returns the exact same generic
+  success response whether the email has an account, belongs to a
+  deleted/banned/disabled one, or is still within its 1-minute regeneration
+  cooldown. Only the reset *token* itself (`GetActivePasswordReset`,
+  `ResetPassword`) — a high-entropy secret the caller already has to
+  possess — is allowed to produce a specific `invalid_or_expired_token`
+  error, since that doesn't leak anything about which accounts exist. See
+  `services.RequestPasswordReset`'s doc comment for the one narrow, deliberate
+  exception (a genuine internal/email-sending failure still surfaces as
+  `internal_server_error`).
+- **Completing a password reset revokes every session on the account** —
+  in both Postgres (`RevokeAllUserSessions`, checked by the refresh-token
+  flow) and Redis (`auth.DeleteSession` per active session ID, checked by
+  access-token verification) — and the token/password-update/session-revoke
+  sequence runs in one transaction (`postgres.CompletePasswordReset`) so a
+  crash mid-reset can't leave the token consumed without the password
+  actually changing.
 - **Dependencies are scanned with [`govulncheck`](https://go.dev/blog/vuln)**
   in CI (and via `make vulncheck` locally), which does call-graph analysis
   rather than flagging every CVE in every transitive dependency regardless
@@ -258,8 +290,6 @@ The database schema (`db/migrations/001_init.up.sql`) already has tables for
 several features the API doesn't expose yet — they were designed for, not
 retrofitted:
 
-- **Password reset** (`password_resets` table, with backup codes and a
-  `source` enum for web/mobile/admin-initiated resets)
 - **MFA** (`mfa_factors` table: TOTP/SMS/email factors, with a trigger
   preventing more than one TOTP factor per user)
 - **SSO** (`auth_identities.provider` already supports `google`/`apple`
@@ -267,16 +297,20 @@ retrofitted:
 - **Admin actions** (`audit_logs` table, `moderator`/`admin` roles, and
   triggers preventing admin deletion/demotion are all in place; there's no
   admin API surface yet)
-- **Scheduled maintenance** — `db/migrations/004_revoke_triggers.up.sql`
-  defines SQL functions (`revoke_expired_sessions`,
-  `remove_old_login_logs`, etc.) meant to be run on a schedule (cron, a
-  Postgres extension like `pg_cron`, or an app-level job); nothing currently
-  invokes them, so these tables will grow unbounded without an operator
-  wiring one up.
+- **Change password while authenticated** — password reset (forgotten
+  password, unauthenticated) is implemented; changing your password from a
+  logged-in session with your current password is not, though it would
+  reuse most of the same pieces (`auth.HashPasswordPHC`,
+  `postgres.UpdatePasswordHash`, session revocation).
 
-If you build on this repo, those are the natural next pieces — the schema,
-audit triggers, and error-code registry were already shaped with them in
-mind.
+Password reset and the scheduled maintenance jobs (`cmd/cron`) — previously
+listed here as schema-only, unimplemented pieces — are now implemented; see
+[Security notes](#security-notes) and
+[Maintenance / cron jobs](#maintenance--cron-jobs) respectively.
+
+If you build on this repo, the remaining items above are the natural next
+pieces — the schema, audit triggers, and error-code registry were already
+shaped with them in mind.
 
 ## Testing
 
@@ -316,10 +350,15 @@ or real server needed for either.
 
 Exercise the real signup → login → refresh → logout lifecycle (lockout,
 refresh-token reuse detection, pepper-rotation rehashing, and
-`StartEmailVerification`'s email-taken/regen-window logic) against real
-Postgres and Redis via [testcontainers-go](https://golang.testcontainers.org/).
-Requires a working Docker (or Podman, via testcontainers' compatibility
-mode) daemon.
+`StartEmailVerification`'s email-taken/regen-window logic), the full
+password-reset flow (enumeration-resistance, cooldown, expired/reused/unknown
+tokens, and that a reset actually revokes every prior session in both
+Postgres and Redis — `password_reset_test.go`), and all six
+`RunMaintenance` cleanup jobs seeded with backdated rows so each cutoff is
+tested precisely (`maintenance_test.go`) — all against real Postgres and
+Redis via [testcontainers-go](https://golang.testcontainers.org/). Requires
+a working Docker (or Podman, via testcontainers' compatibility mode)
+daemon.
 
 This is also the **only** layer that drives requests through the real HTTP
 stack — `internal/handlers`, `internal/services`, `internal/db/postgres`,
@@ -397,6 +436,53 @@ sqlc generate
 Never hand-edit files under `internal/db/postgres/*.sql.go` — they're
 regenerated wholesale and any manual changes will be silently lost. Add a
 query to the relevant `db/queries/*.sql` file and regenerate instead.
+
+## Maintenance / cron jobs
+
+`db/migrations/004_revoke_triggers.up.sql` defines six Postgres cleanup
+functions (expire old password reset tokens, prune login-attempt history
+older than 90 days, drop unverified MFA factors after 2 hours, revoke
+expired/stale sessions, etc.) that nothing calls on its own — Postgres
+functions don't schedule themselves. `cmd/cron` is a small binary
+(`internal/services.RunMaintenance`) that runs all six once, logs each
+job's result individually, and exits non-zero if any failed:
+
+```bash
+make cron                 # runs once, against DATABASE_URL from your env/.env
+go run ./cmd/cron         # equivalent, if you'd rather not go through make
+```
+
+It's built into the same Docker image as the server
+(`/app/auth-cron`, see [Dockerfile](Dockerfile)) and is meant to be invoked
+by an external scheduler — nothing in this repo runs it on a timer itself.
+For example, with plain crontab on a single host:
+
+```cron
+0 * * * * docker run --rm --env-file /path/to/.env auth-api /app/auth-cron
+```
+
+Or as a Kubernetes CronJob:
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: auth-api-maintenance
+spec:
+  schedule: "0 * * * *"   # hourly; the jobs are cheap and idempotent, so more often is fine
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: maintenance
+              image: auth-api:latest
+              command: ["/app/auth-cron"]
+              envFrom:
+                - secretRef:
+                    name: auth-api-env
+          restartPolicy: OnFailure
+```
 
 ## Useful dev commands
 

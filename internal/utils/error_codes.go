@@ -19,6 +19,7 @@ var Errors = struct {
 	InternalServerError   ErrorDetail
 	InvalidCredentials    ErrorDetail
 	InvalidEmailFormat    ErrorDetail
+	InvalidOrExpiredToken ErrorDetail
 	InvalidPasswordFormat ErrorDetail
 	InvalidPayload        ErrorDetail
 	InvalidPayloadMedia   ErrorDetail
@@ -40,6 +41,7 @@ var Errors = struct {
 	InternalServerError:   ErrorDetail{"internal_server_error", "Something went wrong", http.StatusInternalServerError},                          // 500
 	InvalidCredentials:    ErrorDetail{"invalid_credentials", "Invalid email or password", http.StatusUnauthorized},                              // 401
 	InvalidEmailFormat:    ErrorDetail{"invalid_email_format", "Invalid email submitted", http.StatusBadRequest},                                 // 400
+	InvalidOrExpiredToken: ErrorDetail{"invalid_or_expired_token", "This link is invalid or has expired", http.StatusUnauthorized},               // 401
 	InvalidPasswordFormat: ErrorDetail{"invalid_password_format", "Invalid password length", http.StatusBadRequest},                              // 400
 	InvalidPayload:        ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusBadRequest},                                      // 400
 	InvalidPayloadSize:    ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusRequestEntityTooLarge},                           // 413

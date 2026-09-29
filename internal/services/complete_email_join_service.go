@@ -93,7 +93,7 @@ func CompleteEmailJoin(ctx context.Context, db *pgxpool.Pool, redisClient *redis
 
 	// Store the Refresh token in the DB as well
 	q := postgres.New(db)
-	refreshHash := auth.HashRefreshToken(tokens.RefreshToken)
+	refreshHash := auth.HashOpaqueToken(tokens.RefreshToken)
 	_, err = postgres.CreateRefreshSession(ctx, q, postgres.RefreshSessionInput{
 		SessionID:        tokens.SessionID,
 		UserID:           user.ID,
