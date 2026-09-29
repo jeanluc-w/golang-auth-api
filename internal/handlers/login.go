@@ -39,10 +39,13 @@ func (h *Handlers) LoginHandler(w http.ResponseWriter, r *http.Request, _ httpro
 			"message":         "MFA verification required",
 			"mfa_required":    true,
 			"challenge_token": result.MFAChallengeToken,
-			// "totp": submit a code from the authenticator app directly to
-			// mfa/verify-login. "email"/"sms": call mfa/send-login-code
-			// first to actually deliver one.
-			"method": result.MFAMethod,
+			// Every method enabled for this account, in this API's default
+			// priority order — "totp": submit a code from the
+			// authenticator app directly to mfa/verify-login. "email"/
+			// "sms": call mfa/send-login-code first to actually deliver
+			// one. Omitting "method" on the calls below uses methods[0];
+			// to use a different enabled one instead, pass it explicitly.
+			"methods": result.MFAMethods,
 		})
 		return
 	}

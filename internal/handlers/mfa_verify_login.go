@@ -12,22 +12,26 @@ import (
 // MFAVerifyLoginHandler completes an MFA-gated login (POST
 // /auth/v1/mfa/verify-login, an open route — see server.OpenRoutes'
 // comment on why). Given the challenge token from LoginHandler's
-// mfa_required response plus a TOTP or recovery code, it returns a normal
-// access + refresh token pair exactly like LoginHandler would have without
-// MFA in the way.
+// mfa_required response plus a code, it returns a normal access + refresh
+// token pair exactly like LoginHandler would have without MFA in the way.
+// method is optional: omit it to have every enabled method tried against
+// the code in this codebase's default priority order, or name a specific
+// one to check only that method's code (a recovery code always works
+// either way) — see services.VerifyMFALogin.
 func (h *Handlers) MFAVerifyLoginHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	ctx := r.Context()
 	utils.LogDebug(ctx, "Processing MFAVerifyLoginHandler flow")
 
 	var payload struct {
 		ChallengeToken string `json:"challenge_token"`
+		Method         string `json:"method"`
 		Code           string `json:"code"`
 	}
 	if !utils.DecodeJSONHandler(w, r, &payload) {
 		return
 	}
 
-	result, err := services.VerifyMFALogin(ctx, h.Svcs.DB, h.Svcs.RedisClient, payload.ChallengeToken, payload.Code)
+	result, err := services.VerifyMFALogin(ctx, h.Svcs.DB, h.Svcs.RedisClient, payload.ChallengeToken, payload.Method, payload.Code)
 	if err != nil {
 		utils.JSONError(w, *err)
 		return

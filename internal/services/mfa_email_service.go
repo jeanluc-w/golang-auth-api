@@ -152,8 +152,13 @@ func DisableEmailMFA(ctx context.Context, db *pgxpool.Pool, userID, currentPassw
 // challenge whose active method is email (or, once implemented, SMS) — a
 // TOTP challenge needs no such call, since the user's authenticator app
 // already has a valid code at all times. Called between Login returning
-// MFARequired and the user submitting a code to VerifyMFALogin.
-func SendMFALoginCode(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, resendClient *resend.Client, challengeToken string) *utils.ErrorDetail {
+// MFARequired and the user submitting a code to VerifyMFALogin. method is
+// optional: empty defaults to the account's highest-priority enabled
+// method (LoginResult.MFAMethods[0]); given, it must be one of the
+// account's actually-enabled methods (InvalidMFAMethod otherwise) — this
+// is how a client asks for a specific one of several enabled methods
+// instead of whatever this codebase's default priority would pick.
+func SendMFALoginCode(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, resendClient *resend.Client, challengeToken, method string) *utils.ErrorDetail {
 	userID, _, err := auth.VerifyAndParseTemporaryJWT(ctx, redisClient, "Bearer "+challengeToken, entities.RoleMFAPending)
 	if err != nil {
 		utils.LogDebug(ctx, "MFA login challenge token invalid or expired", zap.Error(err))
@@ -165,16 +170,24 @@ func SendMFALoginCode(ctx context.Context, db *pgxpool.Pool, redisClient *redis.
 	}
 	q := postgres.New(db)
 
-	method, enabled, mfaErr := resolveMFAMethod(ctx, q, userPG)
+	methods, mfaErr := listEnabledMFAMethods(ctx, q, userPG)
 	if mfaErr != nil {
-		utils.LogError(ctx, "resolveMFAMethod failed", zap.Error(mfaErr))
+		utils.LogError(ctx, "listEnabledMFAMethods failed", zap.Error(mfaErr))
 		return &utils.Errors.InternalServerError
 	}
-	if !enabled {
+	if len(methods) == 0 {
 		return &utils.Errors.MFANotEnabled
 	}
 
-	switch method {
+	requested := strings.TrimSpace(method)
+	switch {
+	case requested == "":
+		requested = methods[0]
+	case !mfaMethodEnabled(methods, requested):
+		return &utils.Errors.InvalidMFAMethod
+	}
+
+	switch requested {
 	case "email":
 		email, err := q.GetUserEmailByID(ctx, userPG)
 		if err != nil {
@@ -183,9 +196,9 @@ func SendMFALoginCode(ctx context.Context, db *pgxpool.Pool, redisClient *redis.
 		}
 		return sendMFAEmailCode(ctx, redisClient, resendClient, userID, email, "login")
 	default:
-		// TOTP (nothing to send) or an unrecognized method — either way,
-		// calling this endpoint doesn't make sense and isn't a real error
-		// condition the caller can act on differently.
+		// TOTP (nothing to send) — calling this endpoint for it doesn't
+		// make sense and isn't a real error condition the caller can act
+		// on differently.
 		return &utils.Errors.InvalidPayload
 	}
 }

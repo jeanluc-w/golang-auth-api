@@ -44,7 +44,11 @@ using it for anything real.
   never a caller-supplied address — with the same expiry/attempt-limit/
   constant-time-comparison treatment as TOTP codes and a resend cooldown
   matching the signup verification code's. See [Security
-  notes](#security-notes) for why it doesn't auto-send on login.
+  notes](#security-notes) for why it doesn't auto-send on login. When more
+  than one method is enabled, `login` reports all of them
+  (`"methods": ["totp", "email"]`) and a client can either accept the
+  default (first-listed) one or explicitly request a different enabled
+  method on both `mfa/send-login-code` and `mfa/verify-login`.
 - **SSO (Google, Apple)** via OIDC ID token verification against each
   provider's live JWKS (signature, issuer, audience, expiry — see
   `internal/auth/oidc.go`), with a deliberately conservative account-linking
@@ -137,8 +141,8 @@ understand any given flow — they're not thin passthroughs to the DB.
 | POST   | `/auth/v1/mfa/enroll`               | access JWT             | Start TOTP enrollment; returns a secret + QR provisioning URI |
 | POST   | `/auth/v1/mfa/verify`               | access JWT             | Confirm enrollment with a code; activates MFA and returns recovery codes |
 | POST   | `/auth/v1/mfa/disable`              | access JWT + current password | Turn MFA off |
-| POST   | `/auth/v1/mfa/verify-login`         | MFA challenge token in body | Complete an MFA-gated login with a code |
-| POST   | `/auth/v1/mfa/send-login-code`      | MFA challenge token in body | Deliver (or re-deliver) a login code for an email/SMS MFA challenge |
+| POST   | `/auth/v1/mfa/verify-login`         | MFA challenge token in body | Complete an MFA-gated login with a code; optional `method` picks which enabled factor to check it against |
+| POST   | `/auth/v1/mfa/send-login-code`      | MFA challenge token in body | Deliver (or re-deliver) a login code for an email/SMS MFA challenge; optional `method` picks which one |
 | POST   | `/auth/v1/mfa/email/enroll`         | access JWT             | Start email MFA enrollment; emails a code to the account's own address |
 | POST   | `/auth/v1/mfa/email/verify`         | access JWT             | Confirm enrollment with the emailed code; activates it and returns recovery codes |
 | POST   | `/auth/v1/mfa/email/disable`        | access JWT + current password | Turn email MFA off |
@@ -163,7 +167,7 @@ understand any given flow — they're not thin passthroughs to the DB.
 | POST   | `/auth/v1/passkey/credentials/:id/rename` | access JWT       | Rename a passkey |
 | DELETE | `/auth/v1/passkey/credentials/:id`  | access JWT + current password | Remove a passkey |
 
-A `login` response for an MFA-enabled account is `{"mfa_required": true, "challenge_token": "...", "method": "totp"|"email"}` instead of tokens. For `"totp"`, submit a code from the authenticator app directly to `mfa/verify-login`. For `"email"`, call `mfa/send-login-code` first to actually deliver a code (nothing is sent automatically just because a login attempt happened — see [Security notes](#security-notes)), then submit it the same way. A recovery code works at `mfa/verify-login` regardless of which method is active.
+A `login` response for an MFA-enabled account is `{"mfa_required": true, "challenge_token": "...", "methods": ["totp", "email"]}` instead of tokens — every method currently enabled for the account, in this API's default priority order (TOTP first). A client with no preference just uses `methods[0]` and omits `method` from the calls below entirely: for `"totp"`, submit a code from the authenticator app directly to `mfa/verify-login`; for `"email"`, call `mfa/send-login-code` first to actually deliver a code (nothing is sent automatically just because a login attempt happened — see [Security notes](#security-notes)), then submit it the same way. A client that wants a *specific* one of several enabled methods instead — a factor picker, or "I don't have my phone, email me a code" — passes that method explicitly to both endpoints; either rejects a method that isn't actually enabled for the account (`invalid_mfa_method`) rather than silently falling back to a different one. A recovery code works at `mfa/verify-login` regardless of which method (if any) was requested.
 
 The four `passkey/register/*` and `passkey/login/*` endpoints are the
 exception to every other route's `{"error": ..., "message": ...}` JSON
@@ -398,6 +402,17 @@ Written for someone reviewing this as a reference, not just using it — the
   button on a "check your email" screen also needs to call the exact same
   endpoint either way, so nothing is saved by special-casing the first
   send.
+- **Requesting a specific MFA method never falls back to a different one**
+  — `mfa/verify-login` and `mfa/send-login-code` both accept an optional
+  `method`; if given, `listEnabledMFAMethods`
+  (`internal/services/mfa_service.go`) validates it's actually one of the
+  account's currently-enabled factors before doing anything else
+  (`InvalidMFAMethod` otherwise). Concretely, this means `VerifyMFALogin`
+  with `method: "email"` on an account that also has TOTP enabled checks
+  *only* the email code — a wrong-shaped guess never gets a second silent
+  attempt against a different factor's check. A recovery code is the one
+  exception (see below): it's checked regardless of which method, if any,
+  was requested.
 - **Email MFA enrollment and login codes always go to the account's own,
   already-verified email** (`GetUserEmailByID`, not any caller-supplied
   address) — an enrollment call can't be used to redirect codes to an
@@ -529,11 +544,6 @@ retrofitted:
   and SMS factors simultaneously) — TOTP and email both have working code
   paths now; SMS needs a paid provider integration (Twilio et al.) not yet
   wired in.
-- **A client-facing "which MFA method do I have" picker** — when more than
-  one factor type is enabled for an account, `resolveMFAMethod`
-  (`internal/services/mfa_service.go`) always offers TOTP first, then
-  email, in a fixed priority order; there's no way for the client to ask
-  for a different enabled method instead.
 - **Linking an additional SSO provider (or email/password) to an
   already-authenticated account** — `services.SSOLogin` currently rejects
   an SSO login whose email already has an account under a different
@@ -602,8 +612,12 @@ change (`change_password_test.go`), the full MFA lifecycle (enroll → verify
 → MFA-gated login via TOTP or a recovery code → disable, plus wrong-code and
 wrong-password rejection — `mfa_test.go`), the same lifecycle for email MFA
 plus the login-time `send-login-code` gate (rejected for a TOTP-only
-challenge, a resend cooldown, and that a TOTP recovery code still works as
-an email-MFA login fallback — `mfa_email_test.go`), SSO's account-linking policy
+challenge, a resend cooldown, a TOTP recovery code still working as an
+email-MFA login fallback, and — for an account with both TOTP and email
+enabled — that explicitly requesting `method: "email"` is scoped to only
+that method's code while requesting an unconfigured method like `"sms"` is
+rejected outright rather than silently falling back to whatever's enabled
+— `mfa_email_test.go`), SSO's account-linking policy
 (new account, existing login, email-not-verified, email-conflict across
 providers, username-collision suffixing — `sso_test.go`), the admin API's
 authorization/attribution model (ban/unban/disable/enable/force-logout all

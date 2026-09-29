@@ -154,7 +154,7 @@ func TestMFA_VerifyLogin_TOTPCode(t *testing.T) {
 		t.Fatalf("totp.GenerateCode: %v", err)
 	}
 
-	result, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login.MFAChallengeToken, loginCode)
+	result, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login.MFAChallengeToken, "", loginCode)
 	if errDetail != nil {
 		t.Fatalf("VerifyMFALogin: %+v", errDetail)
 	}
@@ -170,7 +170,7 @@ func TestMFA_VerifyLogin_TOTPCode(t *testing.T) {
 	}
 
 	// The challenge token must be single-use.
-	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login.MFAChallengeToken, loginCode); errDetail == nil {
+	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login.MFAChallengeToken, "", loginCode); errDetail == nil {
 		t.Error("expected a consumed MFA challenge token to be rejected on reuse")
 	}
 }
@@ -187,7 +187,7 @@ func TestMFA_VerifyLogin_RecoveryCode(t *testing.T) {
 		t.Fatalf("Login: %+v", errDetail)
 	}
 
-	result, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login.MFAChallengeToken, recoveryCodes[0])
+	result, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login.MFAChallengeToken, "", recoveryCodes[0])
 	if errDetail != nil {
 		t.Fatalf("VerifyMFALogin with recovery code: %+v", errDetail)
 	}
@@ -201,12 +201,12 @@ func TestMFA_VerifyLogin_RecoveryCode(t *testing.T) {
 	if errDetail != nil {
 		t.Fatalf("second Login: %+v", errDetail)
 	}
-	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login2.MFAChallengeToken, recoveryCodes[0]); errDetail == nil {
+	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login2.MFAChallengeToken, "", recoveryCodes[0]); errDetail == nil {
 		t.Error("expected an already-used recovery code to be rejected")
 	}
 
 	// A different, still-unused recovery code must still work.
-	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login2.MFAChallengeToken, recoveryCodes[1]); errDetail != nil {
+	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login2.MFAChallengeToken, "", recoveryCodes[1]); errDetail != nil {
 		t.Errorf("expected a different unused recovery code to succeed: %+v", errDetail)
 	}
 }
@@ -222,14 +222,14 @@ func TestMFA_VerifyLogin_WrongCodeRejected(t *testing.T) {
 	if errDetail != nil {
 		t.Fatalf("Login: %+v", errDetail)
 	}
-	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login.MFAChallengeToken, "000000"); errDetail == nil {
+	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, login.MFAChallengeToken, "", "000000"); errDetail == nil {
 		t.Error("expected an incorrect MFA code to be rejected")
 	}
 }
 
 func TestMFA_VerifyLogin_ExpiredOrUnknownChallengeRejected(t *testing.T) {
 	ctx := context.Background()
-	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, "not-a-real-challenge-token", "123456"); errDetail == nil {
+	if _, errDetail := services.VerifyMFALogin(ctx, testDB, testRedis, "not-a-real-challenge-token", "", "123456"); errDetail == nil {
 		t.Error("expected a bogus challenge token to be rejected")
 	}
 }

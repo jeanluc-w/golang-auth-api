@@ -28,14 +28,21 @@ type LoginResult struct {
 	// has MFA enabled: AccessToken/RefreshToken/UserID/Username are all
 	// empty in that case, and MFAChallengeToken must be submitted (along
 	// with a code) to services.VerifyMFALogin to actually complete the
-	// login. MFAMethod tells the caller which channel that code comes
-	// from: "totp" (the user's authenticator app already has one — no
-	// further action needed before submitting it) or "email"/"sms" (the
-	// caller must first call services.SendMFALoginCode to actually
-	// deliver one).
+	// login. MFAMethods lists every method enabled for the account, e.g.
+	// ["totp","email"], in this codebase's default priority order — a
+	// client with no preference just uses MFAMethods[0] and omits method
+	// from the calls below entirely. "totp" needs no further action before
+	// submitting a code (the authenticator app already has one); "email"
+	// (or "sms") needs services.SendMFALoginCode called first to actually
+	// deliver one. A client that wants a *specific* one of several enabled
+	// methods — a factor picker, or "I don't have my phone" — passes that
+	// method explicitly to both SendMFALoginCode and VerifyMFALogin
+	// instead of leaving it empty; either rejects a method that isn't
+	// actually enabled for the account (InvalidMFAMethod) rather than
+	// silently falling back to a different one.
 	MFARequired       bool
 	MFAChallengeToken string
-	MFAMethod         string
+	MFAMethods        []string
 }
 
 // Login authenticates an email/password pair, applies failed-attempt
@@ -121,25 +128,25 @@ func Login(ctx context.Context, db *pgxpool.Pool, redisClient *redis.Client, ema
 	}
 
 	// MFA gate: a correct password alone isn't enough to finish logging in
-	// on an MFA-enabled account. resolveMFAMethod erroring for any reason
-	// is treated as an internal error that FAILS THE LOGIN, not as "assume
-	// MFA is off" — an attacker able to somehow make that lookup error out
-	// must not be able to use that to skip MFA. Don't relax this without a
-	// very good reason.
-	method, mfaEnabled, mfaErr := resolveMFAMethod(ctx, q, identity.UserID)
+	// on an MFA-enabled account. listEnabledMFAMethods erroring for any
+	// reason is treated as an internal error that FAILS THE LOGIN, not as
+	// "assume MFA is off" — an attacker able to somehow make that lookup
+	// error out must not be able to use that to skip MFA. Don't relax this
+	// without a very good reason.
+	methods, mfaErr := listEnabledMFAMethods(ctx, q, identity.UserID)
 	if mfaErr != nil {
-		utils.LogError(ctx, "resolveMFAMethod failed", zap.Error(mfaErr))
+		utils.LogError(ctx, "listEnabledMFAMethods failed", zap.Error(mfaErr))
 		return nil, &utils.Errors.InternalServerError
 	}
-	if mfaEnabled {
+	if len(methods) > 0 {
 		challengeToken, err := auth.GenerateTemporaryJWT(ctx, redisClient, identity.UserID.String(), entities.RoleMFAPending, config.Loaded.MFAChallengeTTL)
 		if err != nil {
 			utils.LogError(ctx, "Failed to generate MFA challenge token", zap.Error(err))
 			return nil, &utils.Errors.InternalServerError
 		}
 		recordLoginAttempt(ctx, q, identity.UserID, identity.IdentityID, postgres.LoginResultMfaRequired, ip, ua)
-		utils.LogInfo(ctx, "Login password verified; MFA challenge issued", zap.String("user_id", identity.UserID.String()), zap.String("method", method))
-		return &LoginResult{MFARequired: true, MFAChallengeToken: challengeToken, MFAMethod: method}, nil
+		utils.LogInfo(ctx, "Login password verified; MFA challenge issued", zap.String("user_id", identity.UserID.String()), zap.Strings("methods", methods))
+		return &LoginResult{MFARequired: true, MFAChallengeToken: challengeToken, MFAMethods: methods}, nil
 	}
 	// Otherwise: no factor is both verified and enabled — proceed as a
 	// normal login.

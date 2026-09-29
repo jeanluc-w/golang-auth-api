@@ -23,6 +23,7 @@ var Errors = struct {
 	InvalidCredentials        ErrorDetail
 	InvalidEmailFormat        ErrorDetail
 	InvalidMFACode            ErrorDetail
+	InvalidMFAMethod          ErrorDetail
 	InvalidOrExpiredToken     ErrorDetail
 	InvalidPasswordFormat     ErrorDetail
 	InvalidPayload            ErrorDetail
@@ -62,6 +63,7 @@ var Errors = struct {
 	InvalidCredentials:        ErrorDetail{"invalid_credentials", "Invalid email or password", http.StatusUnauthorized},                                               // 401
 	InvalidEmailFormat:        ErrorDetail{"invalid_email_format", "Invalid email submitted", http.StatusBadRequest},                                                  // 400
 	InvalidMFACode:            ErrorDetail{"invalid_mfa_code", "Invalid or expired MFA code", http.StatusUnauthorized},                                                // 401
+	InvalidMFAMethod:          ErrorDetail{"invalid_mfa_method", "This MFA method is not set up for this account", http.StatusBadRequest},                             // 400
 	InvalidOrExpiredToken:     ErrorDetail{"invalid_or_expired_token", "This link is invalid or has expired", http.StatusUnauthorized},                                // 401
 	InvalidPasswordFormat:     ErrorDetail{"invalid_password_format", "Invalid password length", http.StatusBadRequest},                                               // 400
 	InvalidPayload:            ErrorDetail{"invalid_payload", "Invalid request payload", http.StatusBadRequest},                                                       // 400
