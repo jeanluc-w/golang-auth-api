@@ -24,6 +24,7 @@ import (
 	"auth-api/internal/handlers"
 	"auth-api/internal/server"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/ulule/limiter/v3"
@@ -42,12 +43,21 @@ const (
 
 type testServerOptions struct {
 	resendStatus int
+	webAuthn     *webauthn.WebAuthn
 }
 
 type testServerOption func(*testServerOptions)
 
 func withFailingResend() testServerOption {
 	return func(o *testServerOptions) { o.resendStatus = http.StatusInternalServerError }
+}
+
+// withWebAuthn configures the test server with a real *webauthn.WebAuthn
+// (nil by default, matching production when WEBAUTHN_RP_ID is unset) — for
+// tests that need the passkey endpoints to actually be enabled, as opposed
+// to the "not configured" path every other test exercises.
+func withWebAuthn(w *webauthn.WebAuthn) testServerOption {
+	return func(o *testServerOptions) { o.webAuthn = w }
 }
 
 // newTestServer builds the REAL application handler (handlers.NewHandler)
@@ -74,7 +84,7 @@ func newTestServer(t *testing.T, opts ...testServerOption) *httptest.Server {
 	}
 	limiterInstance := limiter.New(store, limiter.Rate{Period: time.Second, Limit: 1000})
 
-	svcs := server.NewServices(testDB, testRedis, fakeResend, limiterInstance, zap.NewNop(), nil, nil, nil)
+	svcs := server.NewServices(testDB, testRedis, fakeResend, limiterInstance, zap.NewNop(), nil, nil, options.webAuthn)
 	ts := httptest.NewServer(handlers.NewHandler(svcs))
 	t.Cleanup(ts.Close)
 	return ts
